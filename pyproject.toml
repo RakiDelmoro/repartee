@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repartee"
+version = "0.1.0"
+description = "Repartee: a 2B full-duplex speech-to-speech conversation model"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "librosa>=0.10",
+    "torch>=2.6",
+    "torchaudio>=2.6",
+    "transformers>=5.20.2",
+    "accelerate>=1.0",
+    "datasets>=3.0",
+    "huggingface_hub>=0.27",
+    "peft>=0.14",
+    "safetensors>=0.4",
+]
+
+[project.optional-dependencies]
+serve = ["sounddevice>=0.5", "webrtc-audio-processing>=2.0"]
+eval = ["utmos>=0.0.4"]
+dev = ["pytest>=8.0", "pytest-timeout>=2.3"]
+
+[tool.setuptools]
+packages = ["src", "eval", "serve"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "gpu: requires CUDA",
+    "network: requires Hugging Face network access",
+]

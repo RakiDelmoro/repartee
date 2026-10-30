@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/raw/
+data/tokens*/
+artifacts/
+checkpoints/
+models/
+*.safetensors
+*.bin
+archive/
+data/manifests/
+data/manifests_proto/
+data/audit/
