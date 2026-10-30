@@ -22,7 +22,7 @@ A **prototype** is being validated on the 8 GB RTX 4000 at 256 frames / batch 1.
 | Macro-F1 | 0.000 | **0.5938** | ≥ 0.40 |
 
 Per class: LISTEN F1 0.978, SPEAK 0.910, BACKCHANNEL 0.867, STOP 0.214
-(recall 0.50, precision 0.14). Stage 2 LoRA is running from that checkpoint.
+(recall 0.50, precision 0.14). Stage 2 LoRA was paused at **step 75** on 2026-10-30 for the day; the resumable checkpoint is `<stage2_proto>/state/latest.pt` (step 75, adapter saved at the same step). The last logged step before shutdown was 91, so resume loses ~3 minutes of unsaved work. The next `make stage2-proto` uses `--resume auto`.
 
 **Important:** this is **one epoch over 3.4 h** of the public Open Yap sample,
 not a fully trained model. Repeating this epoch many times would mostly
