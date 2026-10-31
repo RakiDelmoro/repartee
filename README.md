@@ -11,7 +11,7 @@ and deviations live in `REPORT.md`; unrun gates are marked there as
 Gate 0 records the strict 80 ms failure plus the approved 95 ms policy. A
 600-step, one-epoch Stage 1 run on the 3.4 h Open Yap prototype split reached
 held-out control accuracy 0.8735 and macro-F1 0.5938 on the 8 GB RTX 4000.
-Stage 2 LoRA is paused at step 75; `make stage2-proto` resumes automatically from `checkpoints/stage2_proto/state/latest.pt`.
+Stage 2 LoRA is paused at step 100; `make stage2-proto` resumes automatically from `checkpoints/stage2_proto/state/latest.pt`.
 
 This is **not** a fully trained model: it is one epoch over 3.4 h. Repeating
 that epoch would mostly overfit; the next meaningful improvement is more data.
