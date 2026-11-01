@@ -44,7 +44,8 @@ from src.schema import CONTROL_LABELS
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--model", required=True, help="full HF checkpoint directory")
+    parser.add_argument("--model", required=True, help="full HF checkpoint directory (base for --adapter)")
+    parser.add_argument("--adapter", default=None, help="optional PEFT/LoRA adapter directory to merge before evaluation")
     parser.add_argument("--tokens", default="data/tokens_proto")
     parser.add_argument("--split", default="test")
     parser.add_argument("--windows", type=int, default=64)
@@ -90,6 +91,15 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         device=device,
         local_files_only=args.local_files_only,
     )
+    if args.adapter:
+        from peft import PeftModel
+
+        adapter_dir = Path(args.adapter)
+        if not (adapter_dir / "adapter_config.json").exists():
+            raise SystemExit(f"--adapter {adapter_dir} has no adapter_config.json")
+        model = PeftModel.from_pretrained(model, str(adapter_dir))
+        model = model.merge_and_unload()
+        model.eval()
     processor = model_lib.load_processor(args.model, local_files_only=args.local_files_only)
     tokenizer = processor.tokenizer
     control = model_lib.control_token_ids(tokenizer)

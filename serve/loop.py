@@ -922,6 +922,7 @@ class Lfm3DuplexEngine:
         self._depth_device = None
         self._codebook_device = None
         self._codec_device = None
+        self._silence_codes = None
         self._control_ids: list[int] = []
         self._control_id_tensor = None
         self._bos_id = 0
@@ -1027,6 +1028,16 @@ class Lfm3DuplexEngine:
         except (RuntimeError, ValueError):
             logger.warning("could not move LiquidCodec to %s; decoding on its current device", self._device)
         self._codec_device = next(processor.audio_tokenizer.parameters()).device
+        # Every training frame contains an agent-audio slot, including PAD and
+        # LISTEN.  Cache the codec representation of 80 ms of silence so the
+        # inference sequence keeps the same [user, control, agent-audio] shape.
+        with torch.inference_mode():
+            silence = torch.zeros(
+                (1, int(getattr(processor.audio_tokenizer.config, "frame_samples", 1920))),
+                dtype=torch.float32,
+                device=self._codec_device,
+            )
+            self._silence_codes = processor.audio_tokenizer.encode(silence).audio_codes[:, :, 0].contiguous()
         self._loaded = True
 
     # -- state ------------------------------------------------------------
@@ -1154,23 +1165,24 @@ class Lfm3DuplexEngine:
             self._finalize_audio_stream()
 
     # -- step -------------------------------------------------------------
-    def _control_and_text(self, hidden):
+    def _control_label(self, hidden) -> str:
         torch = self._torch
-        logits = self.model.lm_head(hidden.float())[0, -1]
-        control_logits = logits[self._control_id_tensor]
-        index = int(torch.argmax(control_logits).item())
-        label = CONTROL_LABELS[index]
-        text = ""
-        if label in ("SPEAK", "BACKCHANNEL"):
-            masked = logits.clone()
-            masked[self._control_id_tensor] = -float("inf")
-            # Do not emit padding or turn delimiters as text.
-            for special in self.processor.tokenizer.all_special_ids:
-                if 0 <= int(special) < masked.numel():
-                    masked[int(special)] = -float("inf")
-            token = int(torch.argmax(masked).item())
-            text = self.processor.tokenizer.decode([token], skip_special_tokens=True).strip()
-        return label, text
+        head_dtype = self.model.lm_head.weight.dtype
+        logits = self.model.lm_head(hidden.to(head_dtype))[0, -1].float()
+        index = int(torch.argmax(logits[self._control_id_tensor]).item())
+        return CONTROL_LABELS[index]
+
+    def _sample_text_token(self, hidden) -> int | None:
+        """Pick one text token after the control token, mirroring training order."""
+        torch = self._torch
+        head_dtype = self.model.lm_head.weight.dtype
+        logits = self.model.lm_head(hidden.to(head_dtype))[0, -1].float().clone()
+        logits[self._control_id_tensor] = -float("inf")
+        for special in self.processor.tokenizer.all_special_ids:
+            if 0 <= int(special) < logits.numel():
+                logits[int(special)] = -float("inf")
+        token = int(torch.argmax(logits).item())
+        return token if token not in self._control_ids else None
 
     def step(self, user_audio_16k: np.ndarray, tick_index: int) -> EngineOutput:
         self._ensure_state()
@@ -1223,24 +1235,37 @@ class Lfm3DuplexEngine:
         if self._last_hidden is None:
             raise RuntimeError("engine state has no hidden state; reset() must prefill bos")
 
-        label, text = self._control_and_text(self._last_hidden)
-
+        label = self._control_label(self._last_hidden)
+        text = ""
         control_id = torch.tensor(
             [[self._control_ids[CONTROL_LABELS.index(label)]]], dtype=torch.long, device=self._lm_device
         )
         control_embeds = self.model.model.get_input_embeddings()(control_id)
-        control_hidden = self._append_embeds(control_embeds)
+        audio_hidden = self._append_embeds(control_embeds)
+
+        # Training order is [user, control, optional text, agent audio].
+        if label in ("SPEAK", "BACKCHANNEL"):
+            token_id = self._sample_text_token(audio_hidden)
+            if token_id is not None:
+                token_tensor = torch.tensor([[token_id]], dtype=torch.long, device=self._lm_device)
+                token_embed = self.model.model.get_input_embeddings()(token_tensor)
+                audio_hidden = self._append_embeds(token_embed)
+                text = self.processor.tokenizer.decode([token_id], skip_special_tokens=True).strip()
 
         agent_audio = np.zeros(0, dtype=np.float32)
-        if label in ("SPEAK", "BACKCHANNEL"):
+        speaking = label in ("SPEAK", "BACKCHANNEL")
+        if speaking:
             codes = self.model.sample_audio_frame(
-                control_hidden[0, -1].to(self._depth_device),
+                audio_hidden[0, -1].to(self._depth_device),
                 temperature=self.temperature,
                 top_k=self.top_k,
                 history=self._audio_history,
             )
             eos_code = int(getattr(self.model.config, "audio_eos_code", 2016))
-            if not bool((codes == eos_code).all()):
+            if bool((codes == eos_code).all()):
+                speaking = False
+                self._finalize_audio_stream()
+            else:
                 codes_tensor = codes[None]
                 if self._audio_history is None:
                     self._audio_history = codes_tensor
@@ -1260,8 +1285,9 @@ class Lfm3DuplexEngine:
                 with torch.inference_mode():
                     decoded = codec.decode(decode_codes, self._codec_cache, finalize=False).audio_values
                 agent_audio = decoded[0].detach().float().cpu().numpy().astype(np.float32)
-            else:
-                self._finalize_audio_stream()
+        if not speaking:
+            silence = self._silence_codes.to(self._codebook_device)
+            self._append_embeds(self.model.model.get_audio_out_embeds(silence)[None])
 
         if label == "STOP":
             self._finalize_audio_stream()
