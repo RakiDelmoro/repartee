@@ -67,7 +67,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seq-frames", type=int, default=4096, help="frames per sequence (4096 ~ 5.5 min)")
     parser.add_argument("--batch-size", type=int, default=8, help="sequences per GPU")
     parser.add_argument("--grad-accum", type=int, default=2)
-    parser.add_argument("--lr", type=float, default=1e-3, help="connector + token LR (blueprint: 1e-3)")
+    parser.add_argument("--lr", type=float, default=1e-3, help="control-token LR (blueprint: 1e-3)")
+    parser.add_argument("--connector-lr", type=float, default=None, help="connector LR (default: --lr)")
+    parser.add_argument("--audio-weight", type=float, default=1.0, help="audio CE multiplier for audio-preserving retraining")
     parser.add_argument("--weight-decay", type=float, default=0.0, help="never applied to embeddings")
     parser.add_argument("--warmup", type=int, default=500, help="warmup optimizer steps")
     parser.add_argument("--steps", type=int, default=4000, help="blueprint range: 3000-6000")
@@ -250,7 +252,16 @@ def run_real(args: argparse.Namespace) -> int:
         if args.activation_checkpointing:
             enable_activation_checkpointing(model, required=True)
         wrapped = wrap_ddp(model, ctx)
-        optimizer = build_optimizer(wrapped, lr=args.lr, connector_lr=args.lr, weight_decay=args.weight_decay)
+        if args.audio_weight != 1.0:
+            model.config.audio_loss_weight = float(args.audio_weight)
+            if ctx.is_main:
+                print(f"stage1 audio loss weight: {args.audio_weight}")
+        optimizer = build_optimizer(
+            wrapped,
+            lr=args.lr,
+            connector_lr=args.connector_lr if args.connector_lr is not None else args.lr,
+            weight_decay=args.weight_decay,
+        )
         scheduler = WarmupCosineScheduler(optimizer, total_steps=args.steps, warmup_steps=args.warmup)
         state_dir = out_dir / "state"
         resume_path = resolve_resume(args.resume, state_dir)

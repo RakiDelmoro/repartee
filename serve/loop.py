@@ -1262,7 +1262,10 @@ class Lfm3DuplexEngine:
                 history=self._audio_history,
             )
             eos_code = int(getattr(self.model.config, "audio_eos_code", 2016))
-            if bool((codes == eos_code).all()):
+            # The codec rejects any code outside [0, codebook_size).  A partially
+            # EOS frame is malformed audio, not decodable speech, so end the
+            # stream instead of passing it to LiquidCodec.
+            if bool((codes == eos_code).any()):
                 speaking = False
                 self._finalize_audio_stream()
             else:
