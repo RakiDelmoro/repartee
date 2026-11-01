@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="sleep on absolute 80 ms deadlines (default: live audio yes, files no)",
     )
-    parser.add_argument("--aec", action=argparse.BooleanOptionalAction, default=True, help="enable AEC")
+    parser.add_argument("--aec", action=argparse.BooleanOptionalAction, default=None, help="enable AEC (default: live only)")
     parser.add_argument(
         "--aec-backend", choices=["auto", "webrtc", "nlms"], default="auto", help="AEC backend (default: auto)"
     )
@@ -109,13 +109,13 @@ def main(argv: list[str] | None = None) -> int:
             user_speech_dbfs=min(args.user_speech_dbfs, -50.0),
         )
 
+    live = args.input is None or args.output is None
+    use_aec = live if args.aec is None else bool(args.aec)
     aec = None
-    if args.aec:
+    if use_aec:
         from .aec import create_echo_canceller
 
         aec = create_echo_canceller(backend=args.aec_backend)
-
-    live = args.input is None or args.output is None
     realtime = live if args.realtime is None else args.realtime
     ticks = args.ticks
     if ticks is None:
