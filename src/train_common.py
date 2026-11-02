@@ -1112,6 +1112,8 @@ class SupervisedTrainer:
         text_batch_factory: Callable[[int], Iterable[SupervisedBatch]] | None = None,
         text_ratio: float = 0.0,
         on_save: Callable[[int], None] | None = None,
+        extra_loss: Callable[[Any, SupervisedBatch], torch.Tensor] | None = None,
+        audio_weight: float = 1.0,
     ) -> None:
         if grad_accum < 1:
             raise ValueError("grad_accum must be >= 1")
@@ -1133,6 +1135,8 @@ class SupervisedTrainer:
         self.save_every = int(save_every)
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.on_save = on_save
+        self.extra_loss = extra_loss
+        self.audio_weight = float(audio_weight)
         self.throughput = ThroughputMeter()
         self._rng = random.Random(1234)
         self._text_iterator: Iterator[SupervisedBatch] | None = None
@@ -1172,6 +1176,8 @@ class SupervisedTrainer:
             kwargs["audio_out_codes"] = batch.audio_out_codes
         if batch.audio_labels is not None:
             kwargs["audio_labels"] = batch.audio_labels
+        if self.extra_loss is not None:
+            kwargs["output_hidden_states"] = True
         outputs = self.model(**kwargs)
         audio_loss = getattr(outputs, "audio_loss", None)
         loss, parts = duplex_loss(
@@ -1179,7 +1185,13 @@ class SupervisedTrainer:
             batch.labels,
             self.control_ids,
             audio_loss=audio_loss if batch.audio_labels is not None else None,
+            audio_weight=self.audio_weight,
         )
+        if self.extra_loss is not None:
+            extra = self.extra_loss(outputs, batch)
+            if extra is not None:
+                loss = loss + extra
+                parts["distill_loss"] = float(extra.detach())
         return loss, parts
 
     def fit(

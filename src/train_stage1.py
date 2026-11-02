@@ -70,6 +70,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr", type=float, default=1e-3, help="control-token LR (blueprint: 1e-3)")
     parser.add_argument("--connector-lr", type=float, default=None, help="connector LR (default: --lr)")
     parser.add_argument("--audio-weight", type=float, default=1.0, help="audio CE multiplier for audio-preserving retraining")
+    parser.add_argument("--distill-base", default=None, help="frozen base checkpoint for audio-hidden distillation")
+    parser.add_argument("--distill-weight", type=float, default=1.0, help="weight for the audio-hidden distillation loss")
     parser.add_argument("--weight-decay", type=float, default=0.0, help="never applied to embeddings")
     parser.add_argument("--warmup", type=int, default=500, help="warmup optimizer steps")
     parser.add_argument("--steps", type=int, default=4000, help="blueprint range: 3000-6000")
@@ -105,6 +107,78 @@ def _force_fp32(device: torch.device):
     from .train_common import PrecisionContext
 
     return PrecisionContext(device_type=device.type, dtype=None, scaler=None, name="fp32")
+
+
+def _audio_latents(hidden, input_ids, audio_labels, audio_out_token_id):
+    """Hidden states immediately before each supervised agent-audio slot."""
+    placeholders = input_ids == int(audio_out_token_id)
+    preceding = placeholders.clone()
+    preceding[:, 0] = False
+    rows = (audio_labels != -100).all(-1)[preceding[placeholders]]
+    if not bool(rows.any()):
+        return hidden.new_zeros((0, hidden.shape[-1]))
+    return hidden[preceding.roll(-1, dims=1)][rows]
+
+
+def _load_distill_teacher(path: str, device: torch.device, local_only: bool):
+    from transformers import AutoModelForMultimodalLM, BitsAndBytesConfig
+
+    if device.type != "cuda":
+        raise SystemExit("--distill-base requires a CUDA device")
+    config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+    teacher = AutoModelForMultimodalLM.from_pretrained(
+        path,
+        quantization_config=config,
+        device_map={"": str(device)},
+        trust_remote_code=True,
+        local_files_only=local_only,
+    )
+    teacher.eval()
+    for parameter in teacher.parameters():
+        parameter.requires_grad_(False)
+    return teacher
+
+
+def _make_distill_loss(teacher, control, audio_out_token_id: int, weight: float):
+    import torch.nn.functional as F
+
+    control_ids = list(control.by_label().values())
+
+    def extra_loss(outputs, batch):
+        ids = batch.input_ids.clone()
+        for control_id in control_ids:
+            ids[ids == control_id] = int(control.pad)
+        kwargs = {
+            "input_ids": ids,
+            "attention_mask": batch.attention_mask,
+        }
+        if batch.input_features is not None:
+            kwargs["input_features"] = batch.input_features
+            kwargs["feature_attention_mask"] = batch.feature_attention_mask
+        if batch.audio_out_codes is not None:
+            kwargs["audio_out_codes"] = batch.audio_out_codes
+        kwargs["output_hidden_states"] = True
+        with torch.no_grad():
+            teacher_outputs = teacher(**kwargs)
+        student_latents = _audio_latents(
+            outputs.hidden_states[-1], batch.input_ids, batch.audio_labels, audio_out_token_id
+        )
+        teacher_latents = _audio_latents(
+            teacher_outputs.hidden_states[-1], batch.input_ids, batch.audio_labels, audio_out_token_id
+        )
+        if student_latents.numel() == 0 or teacher_latents.numel() == 0:
+            return None
+        similarity = F.cosine_similarity(
+            student_latents.float(), teacher_latents.float(), dim=-1
+        ).mean()
+        return similarity.new_tensor(weight) * (1.0 - similarity)
+
+    return extra_loss
 
 
 def run_smoke(args: argparse.Namespace) -> int:
@@ -252,6 +326,18 @@ def run_real(args: argparse.Namespace) -> int:
         if args.activation_checkpointing:
             enable_activation_checkpointing(model, required=True)
         wrapped = wrap_ddp(model, ctx)
+        distill_teacher = None
+        extra_loss = None
+        if args.distill_base:
+            distill_teacher = _load_distill_teacher(args.distill_base, ctx.device, args.local_files_only)
+            extra_loss = _make_distill_loss(
+                distill_teacher,
+                control,
+                int(model.config.audio_out_token_id),
+                args.distill_weight,
+            )
+            if ctx.is_main:
+                print(f"audio hidden distillation: {args.distill_base} (weight {args.distill_weight})")
         if args.audio_weight != 1.0:
             model.config.audio_loss_weight = float(args.audio_weight)
             if ctx.is_main:
@@ -319,6 +405,8 @@ def run_real(args: argparse.Namespace) -> int:
             text_batch_factory=text_factory,
             text_ratio=args.text_ratio,
             on_save=on_save if ctx.is_main else None,
+            extra_loss=extra_loss,
+            audio_weight=args.audio_weight,
         )
         result = trainer.fit(total_steps=args.steps, epochs=args.epochs, resume_state=resume_state)
         if ctx.is_main:
