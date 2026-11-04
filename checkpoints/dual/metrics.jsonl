@@ -12,3 +12,5 @@
 {"step": 3000, "loss": 6.764, "text_loss": 6.53, "lr": 0.001, "seconds_per_step": 0.79, "frames_per_s": 648.6, "tokens_per_s": 7783.2}
 {"step": 3250, "loss": 6.819, "text_loss": 6.522, "lr": 0.001, "seconds_per_step": 0.89, "frames_per_s": 575.6, "tokens_per_s": 6907.2}
 {"step": 3500, "loss": 6.752, "text_loss": 6.552, "lr": 0.001, "seconds_per_step": 1.11, "frames_per_s": 461.3, "tokens_per_s": 5535.6}
+{"step": 3750, "loss": 6.741, "text_loss": 6.515, "lr": 0.001, "seconds_per_step": 1.909, "frames_per_s": 268.2, "tokens_per_s": 3218.4}
+{"step": 4000, "loss": 6.728, "text_loss": 6.464, "lr": 0.001, "seconds_per_step": 1.999, "frames_per_s": 256.1, "tokens_per_s": 3073.2}

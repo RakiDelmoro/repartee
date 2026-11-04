@@ -177,11 +177,13 @@ def main() -> None:
                     ces_u.append(ce(depth(hu0.reshape(-1, 2048).to(torch.bfloat16), U0.reshape(-1, 12), m0u.reshape(-1, 12)), U0, m0u).item())
                     ces_a.append(ce(depth(ha0.reshape(-1, 2048).to(torch.bfloat16), A0.reshape(-1, 12), m0a.reshape(-1, 12)), A0, m0a).item())
             net.train()
+            done = step - start
             rec = {"step": step, "train_loss": round(loss.item(), 3),
                    "dev_user_ce": round(float(np.mean(ces_u)), 3),
                    "dev_agent_ce": round(float(np.mean(ces_a)), 3),
-                   "frames_s": round(step * BATCH * WINDOW / (time.time() - t0), 1),
-                   "s_step": round((time.time() - t0) / step, 2)}
+                   "frames_s": round(done * BATCH * WINDOW / (time.time() - t0), 1),
+                   "s_step": round((time.time() - t0) / done, 3),
+                   "ts": round(time.time(), 1)}
             logger.write(json.dumps(rec) + "\n"); logger.flush(); print(json.dumps(rec), flush=True)
             legacy_log.write(json.dumps({
                 "step": step, "loss": rec["dev_agent_ce"], "text_loss": rec["dev_user_ce"],
@@ -190,10 +192,10 @@ def main() -> None:
             }) + "\n"); legacy_log.flush()
         if step % CKPT_EVERY == 0:
             torch.save({"step": step, "model": net.state_dict()}, CK / f"dual-{step:07d}.pt")
-            fs = sorted(CK.glob("dual-*.pt"))
+            fs = sorted(CK.glob("dual-[0-9]*.pt"))
             for old in fs[:-5]:
                 old.unlink()
-            (CK / "dual_latest.txt").write_text(sorted(CK.glob("dual-*.pt"))[-1].name)
+            (CK / "dual_latest.txt").write_text(sorted(CK.glob("dual-[0-9]*.pt"))[-1].name)
     print("done", flush=True)
 
 
