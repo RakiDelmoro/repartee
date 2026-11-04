@@ -3,3 +3,12 @@
 {"step": 750, "loss": 6.792, "text_loss": 6.695, "lr": 0.001, "seconds_per_step": 0.69, "frames_per_s": 747.4, "tokens_per_s": 8968.8}
 {"step": 1000, "loss": 6.828, "text_loss": 6.774, "lr": 0.001, "seconds_per_step": 1.33, "frames_per_s": 385.8, "tokens_per_s": 4629.6}
 {"step": 1250, "loss": 6.56, "text_loss": 6.685, "lr": 0.001, "seconds_per_step": 1.56, "frames_per_s": 328.0, "tokens_per_s": 3936.0}
+{"step": 1500, "loss": 6.811, "text_loss": 6.748, "lr": 0.001, "seconds_per_step": 1.68, "frames_per_s": 305.6, "tokens_per_s": 3667.2}
+{"step": 1750, "loss": 6.845, "text_loss": 6.647, "lr": 0.001, "seconds_per_step": 1.73, "frames_per_s": 296.4, "tokens_per_s": 3556.8}
+{"step": 2000, "loss": 6.791, "text_loss": 6.627, "lr": 0.001, "seconds_per_step": 1.78, "frames_per_s": 288.4, "tokens_per_s": 3460.8}
+{"step": 2250, "loss": 6.754, "text_loss": 6.551, "lr": 0.001, "seconds_per_step": 0.33, "frames_per_s": 1551.5, "tokens_per_s": 18618.0}
+{"step": 2500, "loss": 6.746, "text_loss": 6.581, "lr": 0.001, "seconds_per_step": 0.54, "frames_per_s": 943.9, "tokens_per_s": 11326.8}
+{"step": 2750, "loss": 6.762, "text_loss": 6.563, "lr": 0.001, "seconds_per_step": 0.67, "frames_per_s": 761.4, "tokens_per_s": 9136.8}
+{"step": 3000, "loss": 6.764, "text_loss": 6.53, "lr": 0.001, "seconds_per_step": 0.79, "frames_per_s": 648.6, "tokens_per_s": 7783.2}
+{"step": 3250, "loss": 6.819, "text_loss": 6.522, "lr": 0.001, "seconds_per_step": 0.89, "frames_per_s": 575.6, "tokens_per_s": 6907.2}
+{"step": 3500, "loss": 6.752, "text_loss": 6.552, "lr": 0.001, "seconds_per_step": 1.11, "frames_per_s": 461.3, "tokens_per_s": 5535.6}

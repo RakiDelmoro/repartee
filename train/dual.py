@@ -89,18 +89,23 @@ def embed(table, codes):
     return table[idx.reshape(-1)].reshape(*idx.shape, table.shape[1]).sum(-2)
 
 
-def window_of(row, rng):
-    u = np.load(ROOT / "data/codes" / row["user"], mmap_mode="r")
-    a = np.load(ROOT / "data/codes" / row["agent"], mmap_mode="r")
-    n = min(len(u), len(a)); s = int(rng.integers(0, max(1, n - WINDOW)))
-    return np.asarray(u[s:s + WINDOW]), np.asarray(a[s:s + WINDOW])
+def load_arrays(rows):
+    out = []
+    for r in rows:
+        u = np.load(ROOT / "data/codes" / r["user"])
+        a = np.load(ROOT / "data/codes" / r["agent"])
+        n = min(len(u), len(a))
+        out.append((u[:n], a[:n]))
+    print(f"preloaded {len(out)} conversations, {sum(len(u) for u, _ in out)/1e6:.1f}M frames", flush=True)
+    return out
 
 
-def batch_of(rows, rng, n):
+def batch_of(arrays, rng, n):
     us, as_ = [], []
     for _ in range(n):
-        u, a = window_of(rows[int(rng.integers(len(rows)))], rng)
-        us.append(u); as_.append(a)
+        u, a = arrays[int(rng.integers(len(arrays)))]
+        s = int(rng.integers(0, max(1, len(u) - WINDOW)))
+        us.append(u[s:s + WINDOW]); as_.append(a[s:s + WINDOW])
     return (torch.tensor(np.stack(us), dtype=torch.long),
             torch.tensor(np.stack(as_), dtype=torch.long))
 
@@ -135,10 +140,12 @@ def main() -> None:
         print(f"resumed {latest.read_text().strip()} at step {start}", flush=True)
     t0 = time.time()
 
-    dev_batches = [batch_of(dev, rng, 1) for _ in range(8)]
+    train_arrays = load_arrays(train)
+    dev_arrays = load_arrays(dev)
+    dev_batches = [batch_of(dev_arrays, rng, 1) for _ in range(8)]
 
     for step in range(start + 1, STEPS + 1):
-        U, A = batch_of(train, rng, BATCH)
+        U, A = batch_of(train_arrays, rng, BATCH)
         U, A = U.cuda(), A.cuda()
         pu = torch.cat([torch.full_like(U[:, :1], SENTINEL), U[:, :-1]], 1)
         pa = torch.cat([torch.full_like(A[:, :1], SENTINEL), A[:, :-1]], 1)
