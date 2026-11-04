@@ -242,7 +242,7 @@ PAGE = r"""<!doctype html>
 <main>
   <div class="grid">
     <div class="card"><div class="label">Step</div><div class="value" id="step">–</div><div class="small" id="total"></div><div class="progress"><div id="bar"></div></div></div>
-    <div class="card"><div class="label">Loss</div><div class="value" id="loss">–</div><div class="small" id="loss_parts"></div></div>
+    <div class="card"><div class="label">Agent CE (voice)</div><div class="value" id="loss">–</div><div class="small" id="loss_parts"></div></div>
     <div class="card"><div class="label">ETA</div><div class="value" id="eta">–</div><div class="small" id="speed"></div></div>
     <div class="card"><div class="label">Checkpoint</div><div class="value" id="ckpt_age">–</div><div class="small" id="ckpt_path"></div></div>
     <div class="card"><div class="label">Run</div><div class="value" id="run_name" style="font-size:15px">–</div><div class="small" id="run_info"></div></div>
@@ -348,13 +348,13 @@ function render(run) {
   const latest = run.latest || {};
   $("run_name").textContent = run.name;
   const updatedAgo = run.updated ? Math.max(0, Math.round(Date.now() / 1000 - run.updated)) : null;
-  $("run_info").textContent = `${run.start.device || ""} ${run.start.dtype || ""} · ${run.start.seq_frames || "?"} frames · ${run.start.grad_accum || "?"} accum` +
-    (updatedAgo !== null ? ` · updated ${updatedAgo}s ago` : "");
+  $("run_info").textContent = [run.start.device, run.start.dtype, run.start.seq_frames ? `${run.start.seq_frames} frames` : null]
+    .filter(Boolean).join(" · ") + (updatedAgo !== null ? `${run.start.device ? " · " : ""}updated ${updatedAgo}s ago` : "");
   $("step").textContent = Math.round(run.step || 0);
   $("total").textContent = run.total_steps ? `of ${run.total_steps}` : "";
   $("bar").style.width = run.total_steps ? `${Math.min(100, 100 * (run.step || 0) / run.total_steps)}%` : "0%";
   $("loss").textContent = fmt(latest.loss);
-  $("loss_parts").textContent = `text ${fmt(latest.text_loss)} · control ${fmt(latest.control_loss)} · audio ${fmt(latest.audio_loss)}`;
+  $("loss_parts").textContent = `user aux ${fmt(latest.text_loss)} · agent ${fmt(latest.loss)}`;
   $("eta").textContent = fmtDuration(run.eta_s);
   $("speed").textContent = `${fmt(latest.seconds_per_step, 1)} s/step · ${fmt(latest.frames_per_s, 2)} frames/s`;
   const cp = run.checkpoint || {};
@@ -362,10 +362,8 @@ function render(run) {
   $("ckpt_path").textContent = cp.exists ? `${(cp.size_bytes / 2**30).toFixed(2)} GiB · ${cp.path}` : "no state/latest.pt";
   const s = run.series;
   const lossSeries = [
-    {label:"total", values:s.loss, color:"--accent"},
-    {label:"text", values:s.text_loss, color:"--success"},
-    {label:"control", values:s.control_loss, color:"--warning"},
-    {label:"audio", values:s.audio_loss, color:"--error"},
+    {label:"agent (voice)", values:s.loss, color:"--accent"},
+    {label:"user (aux)", values:s.text_loss, color:"--success"},
   ];
   drawSeries($("loss_chart"), s.step, lossSeries);
   legend($("loss_legend"), lossSeries);

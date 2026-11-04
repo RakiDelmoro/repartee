@@ -70,11 +70,9 @@ class DualBackbone(nn.Module):
     def forward(self, ue, ae):
         t = ue.shape[1]
         causal = torch.triu(torch.ones(t, t, device=ue.device, dtype=torch.bool), diagonal=1)
-        hu_in = ue + self.pos[:t]
-        ha_in = ae + self.pos[:t]
-        # encoders first (each stream's own history), then cross decode
-        cu = self.user.enc(self.user.proj(hu_in), mask=causal)
-        ca = self.agent.enc(self.agent.proj(ha_in), mask=causal)
+        # project first (2048 -> D), then add positions
+        cu = self.user.enc(self.user.proj(ue) + self.pos[:t], mask=causal)
+        ca = self.agent.enc(self.agent.proj(ae) + self.pos[:t], mask=causal)
         hu = cu
         for layer in self.user.dec:
             hu = layer(hu, ca, causal)
@@ -129,11 +127,17 @@ def main() -> None:
     legacy = ROOT / "checkpoints/dual"; legacy.mkdir(parents=True, exist_ok=True)
     legacy_log = open(legacy / "metrics.jsonl", "a")
     rng = np.random.default_rng(21)
+    start = 0
+    latest = CK / "dual_latest.txt"
+    if latest.exists():
+        st = torch.load(CK / latest.read_text().strip(), map_location="cuda")
+        net.load_state_dict(st["model"]); start = st["step"]
+        print(f"resumed {latest.read_text().strip()} at step {start}", flush=True)
     t0 = time.time()
 
     dev_batches = [batch_of(dev, rng, 1) for _ in range(8)]
 
-    for step in range(1, STEPS + 1):
+    for step in range(start + 1, STEPS + 1):
         U, A = batch_of(train, rng, BATCH)
         U, A = U.cuda(), A.cuda()
         pu = torch.cat([torch.full_like(U[:, :1], SENTINEL), U[:, :-1]], 1)
