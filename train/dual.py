@@ -126,6 +126,8 @@ def main() -> None:
     opt = torch.optim.AdamW(net.parameters(), lr=LR, weight_decay=0.01)
     CK = ROOT / "data/ckpt"; CK.mkdir(exist_ok=True)
     logger = open(CK / "dual_metrics.jsonl", "a")
+    legacy = ROOT / "checkpoints/dual"; legacy.mkdir(parents=True, exist_ok=True)
+    legacy_log = open(legacy / "metrics.jsonl", "a")
     rng = np.random.default_rng(21)
     t0 = time.time()
 
@@ -170,6 +172,11 @@ def main() -> None:
                    "frames_s": round(step * BATCH * WINDOW / (time.time() - t0), 1),
                    "s_step": round((time.time() - t0) / step, 2)}
             logger.write(json.dumps(rec) + "\n"); logger.flush(); print(json.dumps(rec), flush=True)
+            legacy_log.write(json.dumps({
+                "step": step, "loss": rec["dev_agent_ce"], "text_loss": rec["dev_user_ce"],
+                "lr": LR, "seconds_per_step": rec["s_step"], "frames_per_s": rec["frames_s"],
+                "tokens_per_s": round(rec["frames_s"] * 12, 1),
+            }) + "\n"); legacy_log.flush()
         if step % CKPT_EVERY == 0:
             torch.save({"step": step, "model": net.state_dict()}, CK / f"dual-{step:07d}.pt")
             fs = sorted(CK.glob("dual-*.pt"))
