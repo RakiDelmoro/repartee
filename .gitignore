@@ -2,15 +2,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-.ruff_cache/
-data/raw/
-data/tokens*/
-artifacts/
-checkpoints/
+
+# data and weights are local, not in git
+data/
 models/
+image.png
+*.pt
 *.safetensors
-*.bin
-archive/
-data/manifests/
-data/manifests_proto/
-data/audit/
+*.wav
+*.npy
