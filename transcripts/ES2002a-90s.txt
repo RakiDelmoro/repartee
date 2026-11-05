@@ -1,0 +1,8 @@
+Source : AMI corpus, ES2002a (4-speaker meeting), Mix-Headset
+Clip   : 00:05:00-00:06:30 (90.0 s, 16 kHz mono)
+Model  : Qwen/Qwen3-ASR-1.7B-hf (fp16, CUDA)
+Device : rep02   Language: English   Duration: 90.0s
+
+--- TRANSCRIPT ---
+
+I don't know what mine is. I'm gonna have to think on the spot now. Impressionist. I draw. Is that a whale? Yeah. Yeah. Um. Oh my. I don't know. It's just the first animal I can think of the top of my head. Yes. Big reason is because I'm allergic to most animals. Allergic to animal fur, so fish was a natural choice. Yeah, and I kind of like whales. They come in and they'll eat everything in sight. They're quite harmless and mild and interesting. Okay. I still don't know what I'm gonna write about. Um. Superb sketch, by the way. Tail's big, I think. I was gonna choose a dog as well, but I'll just draw a different kind of dog. Yeah. My favourite animal is my own dog at home. Um. That doesn't really look like him, actually. He looks more like a pig, actually. Oh. I see a dog in there. Do you? Oh, that's very good of you. Now I see a rooster. Uh.

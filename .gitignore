@@ -1,13 +1,7 @@
-.venv/
+data/
+model/
+samples/
 __pycache__/
 *.pyc
+.venv/
 .pytest_cache/
-
-# data and weights are local, not in git
-data/
-models/
-image.png
-*.pt
-*.safetensors
-*.wav
-*.npy
