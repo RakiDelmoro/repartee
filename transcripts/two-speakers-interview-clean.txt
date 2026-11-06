@@ -1,0 +1,9 @@
+Source : David Sylvian interview, 1984 (Wikimedia Commons, 2 speakers)
+Clip   : 00:01:00-00:02:30 (90.0 s, 16 kHz mono)
+Audio  : clean - no added noise
+Model  : Qwen/Qwen3-ASR-1.7B-hf (fp16, CUDA)
+Device : rep06   Language: English   Duration: 90.0s
+
+--- TRANSCRIPT ---
+
+Just sort of playing around with the four track, and I did that with "Brilliant Trees," and I used a sort of organ sounds, and then I used a synthesizer that had a very similar sound to John's trumpet, and that's when I thought it'd be wonderful, you know, if John could be playing this, it suit the trumpet, the trumpet sound and the organ sound went so well together, you know. This song "Brilliant Trees" develops so slowly. In the middle, it changes completely, and then it develops again very slowly. Obviously, you must know that compositions like these don't sell very well. What do you think about that? Yes, they don't sell very well. But see, even if it did sell well, there'd still only be a minority of people that would understand it. So I'm quite happy to sell fewer records and have that small audience understand what I'm doing. If you, if you, if you're, if you're selling masses of records anyway, and and you are producing records that have some emotional value or artistic content or whatever, you still only reach a small part of that audience with because the majority won't understand it, unfortunately. So the only difference is you don't earn as much money, but you know, as I'd care too much about what the music I'm making to take that into consideration. I don't think you should repeat yourself. I definitely couldn't compromise by thinking about the audience by thinking this is what they would like.

@@ -1,5 +1,5 @@
 data/
-model/
+models/
 samples/
 __pycache__/
 *.pyc

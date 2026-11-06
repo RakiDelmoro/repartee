@@ -1,0 +1,34 @@
+{
+  "clean-1.7B": {
+    "chars": 1430,
+    "words": 254,
+    "language": "English",
+    "infer_s": 55.5
+  },
+  "vacuum-1.7B": {
+    "chars": 1414,
+    "words": 249,
+    "language": "English",
+    "infer_s": 33.3
+  },
+  "load-1.7B": {
+    "load_s": 61.1,
+    "vram_gb": 4.08
+  },
+  "clean-0.6B": {
+    "chars": 1442,
+    "words": 258,
+    "language": "English",
+    "infer_s": 28.9
+  },
+  "vacuum-0.6B": {
+    "chars": 1437,
+    "words": 259,
+    "language": "English",
+    "infer_s": 29.4
+  },
+  "load-0.6B": {
+    "load_s": 21.9,
+    "vram_gb": 1.58
+  }
+}

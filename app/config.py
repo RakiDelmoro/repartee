@@ -14,7 +14,7 @@ DONE_DIR = DATA_DIR / "done"
 FAILED_DIR = DATA_DIR / "failed"
 DB_PATH = Path(os.environ.get("REPARTEE_DB", DATA_DIR / "repartee.db"))
 
-ASR_MODEL_DIR = Path(os.environ.get("REPARTEE_MODEL_DIR", HOME / "model"))
+ASR_MODEL_DIR = Path(os.environ.get("REPARTEE_MODEL_DIR", HOME / "models"))
 ASR_MODEL_LOCAL = ASR_MODEL_DIR / "Qwen3-ASR-1.7B-hf"
 ASR_MODEL = os.environ.get("REPARTEE_ASR_MODEL") or (
     str(ASR_MODEL_LOCAL) if ASR_MODEL_LOCAL.exists() else "Qwen/Qwen3-ASR-1.7B-hf"

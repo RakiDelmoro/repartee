@@ -1,9 +1,0 @@
-Source : AMI corpus, ES2002a (4-speaker meeting) + restaurant ambience
-Clip   : 00:05:00-00:06:30 (90.0 s, 16 kHz mono)
-Mix    : speech + restaurant noise @ 20 dB SNR (active speech)
-Model  : Qwen/Qwen3-ASR-1.7B-hf (fp16, CUDA)
-Device : rep03   Language: English   Duration: 90.0s
-
---- TRANSCRIPT ---
-
-Precious. Is that real? Yeah. It's a perfect sketch. I see a dog in there. Yeah.
