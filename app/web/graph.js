@@ -1,6 +1,7 @@
 /* Obsidian-style force graph for the knowledge base. No dependencies. */
 
 const COLORS = {
+  day: "#e879f9",
   session: "#a78bfa",
   decision: "#22c55e",
   action: "#3b82f6",
@@ -29,6 +30,7 @@ const state = {
   selected: null,
   hidden: new Set(),
   session: null,
+  day: null,
   width: 0,
   height: 0,
   dpr: 1,
@@ -61,7 +63,7 @@ async function load() {
       y: Math.sin(angle) * radius,
       vx: 0,
       vy: 0,
-      r: node.type === "session" ? 13 : 5 + Math.min(9, deg * 1.6),
+      r: node.type === "day" ? 17 : node.type === "session" ? 11 : 5 + Math.min(9, deg * 1.6),
       degree: deg,
       neighbours: new Set(),
     };
@@ -118,31 +120,62 @@ function buildFilters() {
 
 function buildSessions() {
   const sessions = state.nodes.filter((n) => n.type === "session");
-  const counts = new Map();
+  const perSession = new Map();
+  const perDay = new Map();
   for (const node of state.nodes) {
-    if (node.session && node.type !== "session") {
-      counts.set(node.session, (counts.get(node.session) || 0) + 1);
-    }
+    if (!node.session || node.type === "session") continue;
+    perSession.set(node.session, (perSession.get(node.session) || 0) + 1);
+    if (node.day) perDay.set(node.day, (perDay.get(node.day) || 0) + 1);
+  }
+
+  const byDay = new Map();
+  for (const session of sessions) {
+    const day = session.day || "unknown";
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(session);
   }
 
   sessionsEl.innerHTML = "";
-  sessions
-    .sort((a, b) => b.label.localeCompare(a.label))
-    .forEach((session) => {
-      const li = document.createElement("li");
+  [...byDay.keys()]
+    .sort((a, b) => b.localeCompare(a))
+    .forEach((day) => {
+      const heading = document.createElement("li");
+      heading.className = "day-row";
       const name = document.createElement("span");
-      name.textContent = session.label;
-      const count = document.createElement("span");
-      count.className = "count";
-      count.textContent = counts.get(session.id) || 0;
-      li.append(name, count);
-      li.addEventListener("click", () => {
-        state.session = state.session === session.id ? null : session.id;
-        [...sessionsEl.children].forEach((el) => el.classList.remove("active"));
-        if (state.session) li.classList.add("active");
+      name.textContent = day;
+      const total = document.createElement("span");
+      total.className = "count";
+      total.textContent = perDay.get(day) || 0;
+      heading.append(name, total);
+      heading.addEventListener("click", () => {
+        state.day = state.day === day ? null : day;
+        state.session = null;
+        [...sessionsEl.querySelectorAll("li")].forEach((el) => el.classList.remove("active"));
+        if (state.day) heading.classList.add("active");
         restart();
       });
-      sessionsEl.append(li);
+      sessionsEl.append(heading);
+
+      byDay.get(day)
+        .sort((a, b) => b.label.localeCompare(a.label))
+        .forEach((session) => {
+          const li = document.createElement("li");
+          li.className = "session-row";
+          const name = document.createElement("span");
+          name.textContent = session.label;
+          const count = document.createElement("span");
+          count.className = "count";
+          count.textContent = perSession.get(session.id) || 0;
+          li.append(name, count);
+          li.addEventListener("click", () => {
+            state.session = state.session === session.id ? null : session.id;
+            state.day = null;
+            [...sessionsEl.querySelectorAll("li")].forEach((el) => el.classList.remove("active"));
+            if (state.session) li.classList.add("active");
+            restart();
+          });
+          sessionsEl.append(li);
+        });
     });
 }
 
@@ -150,6 +183,10 @@ function buildSessions() {
 
 function visible(node) {
   if (state.hidden.has(node.type)) return false;
+  if (state.day) {
+    if (node.type === "day") return node.id === `day-${state.day}`;
+    if (node.day && node.day !== state.day) return false;
+  }
   if (state.session && node.session && node.session !== state.session) return false;
   return true;
 }
@@ -264,12 +301,17 @@ function draw() {
 
     const showLabel =
       active &&
-      (node.type === "session" || node === focus || node.degree > 3 || view.k > 1.4);
+      (node.type === "day" ||
+        node.type === "session" ||
+        node === focus ||
+        node.degree > 3 ||
+        view.k > 1.4);
     if (showLabel) {
       ctx.font = `${12 / view.k}px ui-sans-serif, system-ui, sans-serif`;
       ctx.fillStyle = active ? "#dfe6f0" : "#5a6573";
       ctx.textAlign = "center";
-      const text = node.label.length > 46 ? node.label.slice(0, 46) + "…" : node.label;
+      const limit = node.type === "day" ? 24 : 46;
+      const text = node.label.length > limit ? node.label.slice(0, limit) + "…" : node.label;
       ctx.fillText(text, node.x, node.y + node.r + 13 / view.k);
     }
   }

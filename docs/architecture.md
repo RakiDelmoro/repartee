@@ -76,6 +76,21 @@ The front end is `app/web/` (HTML, CSS, one dependency-free JS file): force-dire
 canvas graph, type filters, session filter, click-through to evidence. There is no
 authentication on the UI - it is a read-only LAN surface for now.
 
+The graph is three levels: **day -> session -> event**. The day is derived from the
+session's start timestamp (the first ten characters, `YYYY-MM-DD`), so every
+conversation is filed under the calendar day it started, and each day is a separate
+subgraph. The timestamp itself comes from the upload filename:
+
+```
+rep01-20261107-143012-s003.opus
+      └──┬───┘└──┬──┘
+        date   time
+```
+
+Clock source matters: the device stamps the filename from its own clock, so it must
+sync via SNTP before uploading. A device that boots offline would file audio under
+the wrong day. The server should also record its own receive time as a fallback.
+
 Crash recovery: anything left in `working/` is requeued on startup; `.part` files
 are deleted.
 

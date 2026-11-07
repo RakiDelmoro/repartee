@@ -173,15 +173,22 @@ def graph(limit: int = Query(800, ge=1, le=5000)) -> dict:
         "SELECT id, device, started_at, status FROM sessions ORDER BY started_at DESC"
     ).fetchall()
 
+    days: dict[str, dict] = {}
     for session in sessions:
+        day = (session["started_at"] or "")[:10] or "unknown"
+        if day not in days:
+            days[day] = {"id": f"day-{day}", "label": day, "type": "day", "session": None}
+            nodes.append(days[day])
         nodes.append(
             {
                 "id": session["id"],
-                "label": f"{session['device']} · {(session['started_at'] or '')[:16]}",
+                "label": f"{session['device']} · {(session['started_at'] or '')[11:16]}",
                 "type": "session",
                 "session": session["id"],
+                "day": day,
             }
         )
+        links.append({"source": days[day]["id"], "target": session["id"], "type": "day"})
 
     rows = conn.execute(
         """SELECT id, session_id, kind, text, owner FROM events
@@ -190,6 +197,8 @@ def graph(limit: int = Query(800, ge=1, le=5000)) -> dict:
         (limit,),
     ).fetchall()
 
+    day_of = {s["id"]: (s["started_at"] or "")[:10] or "unknown" for s in sessions}
+
     for event in rows:
         nodes.append(
             {
@@ -197,6 +206,7 @@ def graph(limit: int = Query(800, ge=1, le=5000)) -> dict:
                 "label": event["text"][:90],
                 "type": event["kind"],
                 "session": event["session_id"],
+                "day": day_of.get(event["session_id"]),
             }
         )
         links.append(
@@ -231,6 +241,7 @@ def event_detail(event_id: str) -> dict:
 def api_sessions() -> dict:
     rows = app.state.conn.execute(
         """SELECT s.id, s.device, s.started_at, s.status,
+                  substr(s.started_at, 1, 10) AS day,
                   COUNT(e.id) AS events
            FROM sessions s LEFT JOIN events e ON e.session_id = s.id
            GROUP BY s.id ORDER BY s.started_at DESC"""
