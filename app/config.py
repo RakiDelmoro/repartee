@@ -27,6 +27,12 @@ ASR_MAX_NEW_TOKENS = int(os.environ.get("REPARTEE_ASR_MAX_NEW_TOKENS", "4096"))
 INGEST_TOKEN = os.environ.get("REPARTEE_INGEST_TOKEN") or None
 MAX_UPLOAD_BYTES = int(float(os.environ.get("REPARTEE_MAX_UPLOAD_MB", "512")) * 1024 * 1024)
 
+# OpenAI-compatible endpoint used by the knowledge-base extractor (llama.cpp, ollama, vLLM).
+LLM_BASE_URL = os.environ.get("REPARTEE_LLM_BASE_URL", "http://127.0.0.1:8081/v1")
+LLM_MODEL = os.environ.get("REPARTEE_LLM_MODEL", "Qwen3.5-9B")
+LLM_API_KEY = os.environ.get("REPARTEE_LLM_API_KEY", "none")
+LLM_TIMEOUT = float(os.environ.get("REPARTEE_LLM_TIMEOUT", "600"))
+
 ALL_DIRS = (SPOOL_DIR, WORKING_DIR, DONE_DIR, FAILED_DIR)
 
 

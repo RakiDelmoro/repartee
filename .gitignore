@@ -1,6 +1,7 @@
 data/
 models/
 samples/
+vendor/
 __pycache__/
 *.pyc
 .venv/

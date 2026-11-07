@@ -6,6 +6,7 @@ in transit, so the device sections are **planned**, not built.
 | Document | Covers |
 |---|---|
 | [architecture.md](architecture.md) | system overview, data contracts, server pipeline, knowledge-base stage |
+| [knowledge-base.md](knowledge-base.md) | event schema, extraction contract, model sizing, milestones |
 | [device.md](device.md) | room-mic hardware, firmware plan, segmentation rule, buffering |
 | [asr-notes.md](asr-notes.md) | ASR model choice, measured speed/VRAM/length limits, noise results |
 

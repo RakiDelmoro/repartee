@@ -1,0 +1,31 @@
+{
+  "decisions": [
+    {
+      "text": "Launch moves to Q2, targeting the second week of April",
+      "evidence": "the launch moves to Q2, targeting the second week of April"
+    }
+  ],
+  "actions": [
+    {
+      "text": "Document the Q2 launch date",
+      "owner": "Tom",
+      "evidence": "Tom, I want that documented so nobody is planning against March"
+    },
+    {
+      "text": "Get legal to review the vendor termination clause this week, report back by Thursday",
+      "owner": "Priya",
+      "evidence": "Priya, can you get legal to review the termination clause this week?"
+    }
+  ],
+  "questions": [
+    {
+      "text": "Do we still need the second vendor now that volumes are lower?",
+      "evidence": "Do we still need the second vendor at all, now that the volumes are lower?"
+    }
+  ],
+  "topics": [
+    "Q2 launch date",
+    "vendor contract termination",
+    "enterprise tier pricing (parked, needs finance numbers)"
+  ]
+}
