@@ -62,6 +62,20 @@ data/repartee.db SQLite, conversations table + FTS5 index
 `GET /conversations/{id}`, `GET /search`. `app/pipeline.py` claims files, runs ASR,
 stores the transcript, and moves the file.
 
+## Web UI
+
+`GET /` serves a graph view of the knowledge base, bound to `0.0.0.0` so anyone on
+the LAN can open `http://<host>:8080/`.
+
+- `GET /api/graph` - nodes (sessions, events, entities) and edges
+- `GET /api/events/{id}` - full event including the evidence quote
+- `GET /api/sessions` - session list with event counts
+- `GET /api/stats` - row counts
+
+The front end is `app/web/` (HTML, CSS, one dependency-free JS file): force-directed
+canvas graph, type filters, session filter, click-through to evidence. There is no
+authentication on the UI - it is a read-only LAN surface for now.
+
 Crash recovery: anything left in `working/` is requeued on startup; `.part` files
 are deleted.
 

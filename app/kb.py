@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS events (
     kind        TEXT NOT NULL CHECK (kind IN ('decision', 'action', 'question', 'topic')),
     text        TEXT NOT NULL,
     evidence    TEXT NOT NULL,
+    owner       TEXT,
+    due         TEXT,
     t_start     REAL,
     confidence  REAL,
     created_at  TEXT NOT NULL
@@ -79,6 +81,8 @@ class Event:
     kind: str
     text: str
     evidence: str
+    owner: str | None = None
+    due: str | None = None
     t_start: float | None = None
     confidence: float | None = None
 
@@ -132,14 +136,16 @@ def insert_event(conn: sqlite3.Connection, event: Event) -> bool:
     try:
         conn.execute(
             """INSERT INTO events (id, session_id, kind, text, evidence,
-                                   t_start, confidence, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                   owner, due, t_start, confidence, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 event.id,
                 event.session_id,
                 event.kind,
                 event.text,
                 event.evidence,
+                event.owner,
+                event.due,
                 event.t_start,
                 event.confidence,
                 datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -164,7 +170,7 @@ def list_events(
         params.append(kind)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(
-        f"""SELECT id, session_id, kind, text, evidence, t_start, confidence
+        f"""SELECT id, session_id, kind, text, evidence, owner, due, t_start, confidence
             FROM events {where}
             ORDER BY t_start IS NULL, t_start, id
             LIMIT ?""",

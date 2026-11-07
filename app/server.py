@@ -10,10 +10,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config, db
+from . import kb as knowledge
 from .asr import QwenTranscriber
 from .pipeline import Worker
+
+WEB_DIR = Path(__file__).parent / "web"
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -80,6 +85,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="repartee ingest", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(WEB_DIR / "index.html")
 
 
 @app.get("/health")
@@ -146,3 +157,87 @@ def search(q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=20
         return {"items": db.search(app.state.conn, q, limit)}
     except sqlite3.OperationalError as exc:
         raise HTTPException(400, f"bad query: {exc}") from exc
+
+
+# --- knowledge base -------------------------------------------------------
+
+
+@app.get("/api/graph")
+def graph(limit: int = Query(800, ge=1, le=5000)) -> dict:
+    """Nodes and edges for the graph view: sessions, events, entities."""
+    conn = app.state.conn
+    nodes: list[dict] = []
+    links: list[dict] = []
+
+    sessions = conn.execute(
+        "SELECT id, device, started_at, status FROM sessions ORDER BY started_at DESC"
+    ).fetchall()
+
+    for session in sessions:
+        nodes.append(
+            {
+                "id": session["id"],
+                "label": f"{session['device']} · {(session['started_at'] or '')[:16]}",
+                "type": "session",
+                "session": session["id"],
+            }
+        )
+
+    rows = conn.execute(
+        """SELECT id, session_id, kind, text, owner FROM events
+           ORDER BY session_id, t_start IS NULL, t_start
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+    for event in rows:
+        nodes.append(
+            {
+                "id": event["id"],
+                "label": event["text"][:90],
+                "type": event["kind"],
+                "session": event["session_id"],
+            }
+        )
+        links.append(
+            {"source": event["session_id"], "target": event["id"], "type": "contains"}
+        )
+
+    for entity in conn.execute("SELECT id, kind, name FROM entities").fetchall():
+        nodes.append(
+            {"id": entity["id"], "label": entity["name"], "type": entity["kind"], "session": None}
+        )
+
+    for row in conn.execute("SELECT event_id, entity_id, role FROM event_entities").fetchall():
+        links.append({"source": row["event_id"], "target": row["entity_id"], "type": row["role"]})
+
+    for row in conn.execute("SELECT from_event, to_event, relation FROM event_links").fetchall():
+        links.append(
+            {"source": row["from_event"], "target": row["to_event"], "type": row["relation"]}
+        )
+
+    return {"nodes": nodes, "links": links}
+
+
+@app.get("/api/events/{event_id}")
+def event_detail(event_id: str) -> dict:
+    row = app.state.conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "not found")
+    return dict(row)
+
+
+@app.get("/api/sessions")
+def api_sessions() -> dict:
+    rows = app.state.conn.execute(
+        """SELECT s.id, s.device, s.started_at, s.status,
+                  COUNT(e.id) AS events
+           FROM sessions s LEFT JOIN events e ON e.session_id = s.id
+           GROUP BY s.id ORDER BY s.started_at DESC"""
+    ).fetchall()
+    return {"items": [dict(row) for row in rows]}
+
+
+@app.get("/api/stats")
+def api_stats() -> dict:
+    return knowledge.counts(app.state.conn)

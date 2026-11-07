@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repartee — project knowledge</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <aside id="sidebar">
+    <header>
+      <h1>Project knowledge</h1>
+      <div id="stats" class="muted">loading…</div>
+    </header>
+
+    <section>
+      <h2>Filter</h2>
+      <div id="filters" class="filters"></div>
+    </section>
+
+    <section>
+      <h2>Sessions</h2>
+      <ul id="sessions" class="sessions"></ul>
+    </section>
+
+    <footer class="muted">
+      drag to pan · wheel to zoom · click a node
+    </footer>
+  </aside>
+
+  <main id="stage">
+    <canvas id="graph"></canvas>
+    <div id="empty" class="empty hidden">No events yet.</div>
+  </main>
+
+  <aside id="detail" class="hidden">
+    <button id="close" aria-label="close">×</button>
+    <div id="detail-body"></div>
+  </aside>
+
+  <script src="/static/graph.js"></script>
+</body>
+</html>
