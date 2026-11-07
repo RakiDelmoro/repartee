@@ -15,9 +15,10 @@ FAILED_DIR = DATA_DIR / "failed"
 DB_PATH = Path(os.environ.get("REPARTEE_DB", DATA_DIR / "repartee.db"))
 
 ASR_MODEL_DIR = Path(os.environ.get("REPARTEE_MODEL_DIR", HOME / "models"))
-ASR_MODEL_LOCAL = ASR_MODEL_DIR / "Qwen3-ASR-1.7B-hf"
+ASR_MODEL_NAME = os.environ.get("REPARTEE_ASR_MODEL_NAME", "Qwen3-ASR-0.6B-hf")
+ASR_MODEL_LOCAL = ASR_MODEL_DIR / ASR_MODEL_NAME
 ASR_MODEL = os.environ.get("REPARTEE_ASR_MODEL") or (
-    str(ASR_MODEL_LOCAL) if ASR_MODEL_LOCAL.exists() else "Qwen/Qwen3-ASR-1.7B-hf"
+    str(ASR_MODEL_LOCAL) if ASR_MODEL_LOCAL.exists() else f"Qwen/{ASR_MODEL_NAME}"
 )
 ASR_LANGUAGE = os.environ.get("REPARTEE_ASR_LANGUAGE") or None
 ASR_MAX_NEW_TOKENS = int(os.environ.get("REPARTEE_ASR_MAX_NEW_TOKENS", "4096"))
