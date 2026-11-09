@@ -63,13 +63,18 @@ class Worker(threading.Thread):
     def run(self) -> None:
         conn = db.connect(config.DB_PATH)
         db.init(conn)
+        backoff = self.poll_seconds
         try:
             while not self._stop.is_set():
                 try:
                     self.drain(conn)
+                    backoff = self.poll_seconds
                 except Exception:  # noqa: BLE001 - keep the worker alive
-                    log.exception("drain failed")
-                self._stop.wait(self.poll_seconds)
+                    # A mounted filesystem can return transient errors; back off
+                    # instead of spinning on it once per poll.
+                    log.exception("drain failed; backing off %.0fs", backoff)
+                    backoff = min(backoff * 2, 30.0)
+                self._stop.wait(backoff)
         finally:
             conn.close()
 
