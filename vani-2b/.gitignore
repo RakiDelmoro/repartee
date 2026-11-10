@@ -1,0 +1,4 @@
+vani-2b/data/
+vani-2b/adapters/
+vani-2b/samples/*.wav
+vani-2b/eval/*.json
