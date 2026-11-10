@@ -14,6 +14,8 @@ the mouth, not the brain.
 
 Base: LFM3-Omni-2B, frozen encoders/codec, LoRA adapters.
 
+Documentation: [`docs/`](docs/README.md) — end goal, architecture, decisions, experiments, plan, evaluation, data.
+
 ## Layout
 
 ```
