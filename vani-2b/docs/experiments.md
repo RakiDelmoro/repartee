@@ -10,7 +10,8 @@ Append-only. Every result, including failures, with the data and the verdict.
 | E004 | 2026-11-10 | Continuity v2 | 20 held-out pairs | 90% answer present; 98.3% recall; median 0 ms; one garbled name | pass continuity |
 | E005 | 2026-11-10 | Joint pilot: duplex + injection + mouth | 50 windows from 5 short conversations; 200 steps | 0/63 speak frames on both user-speaking and agent-turn windows; injection 1/2 | fail duplex |
 | E006 | 2026-11-10 | Joint pilot with TTS-energy labels | same windows, labels from re-voiced audio | still 0/63 speak; injection 2/2 exact, gaps 450/0 ms | fail duplex, injection intact |
-| E007 | 2026-11-10 | Extended agent re-voicing | 11 conversations, ~43 min | in progress | pending |
+| E007 | 2026-11-10 | Extended agent re-voicing | 11 conversations, ~43 min | done, one voice | pass |
+| E008 | 2026-11-10 | Policy head + VAD features, joint duplex audio | 129 turn-boundary windows | user 0/63 speak; agent 8–37/63 speak; injection 2/2 exact | **timing pass, content fail** |
 
 ## Interpretation
 
@@ -19,3 +20,6 @@ Append-only. Every result, including failures, with the data and the verdict.
 - The joint duplex failure is not an injection failure. The model never chooses to speak.
 - E006 isolates the cause: fixing the silence-labelled-as-speech bug did not make the
   model speak, so the remaining gap is scale and turn coverage.
+- E008 isolates the next gap: the duplex **policy** now listens and takes the floor on
+  held-out windows, but audio-only generation loops or produces a fragment. The model
+  needs a text plan in the agent slot, not just audio codes.

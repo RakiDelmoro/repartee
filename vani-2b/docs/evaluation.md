@@ -28,10 +28,10 @@ Pass = all checks. A single miss is a fix item, not a pass.
 | Check | Result |
 |---|---|
 | Same voice | cannot test; no duplex speech |
-| Waits | pass |
-| Takes floor | **fail** (0/63 speak) |
+| Waits | **pass**: 0/63 speak |
+| Takes floor | **pass**: 8–37/63 speak |
 | Interrupt | not tested |
-| Handoff | 2/2 exact; joins 450 ms and 0 ms; one restart gone |
+| Handoff | 2/2 exact; joins 0–190 ms |
 | Words | 2/2 exact |
 
 Verdict: **not ready**. See `experiments.md` E005/E006.

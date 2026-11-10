@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -44,6 +45,7 @@ def main() -> None:
         target_modules=r"model\.language_model\..*\.(q_proj|k_proj|v_proj|o_proj|in_proj|out_proj|w1|w2|w3)",
     ))
     base = model.base_model.model
+    mode_head = nn.Linear(base.config.text_config.hidden_size, 2).to(DEVICE)
     model.print_trainable_parameters()
     tok = proc.tokenizer
     listen_id = tok.encode(" listen", add_special_tokens=False)[0]
@@ -74,9 +76,7 @@ def main() -> None:
             use_cache=False,
         )
         h_u = out.last_hidden_state[0, 1::2][:n]
-        mode = torch.where(speak, torch.full_like(speak, base.config.audio_out_token_id, dtype=torch.long),
-                           torch.full_like(speak, listen_id, dtype=torch.long))
-        mode_loss = F.cross_entropy(base.lm_head(h_u).float(), mode)
+        mode_loss = F.cross_entropy(mode_head(h_u.float()), speak.long())
         if speak.any():
             audio_h = h_u[speak]; audio_codes = codes[speak]
             masked = torch.rand(audio_codes.shape, device=DEVICE) < 0.5
@@ -101,7 +101,8 @@ def main() -> None:
         )
         return out.loss
 
-    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=LR, weight_decay=0.0)
+    params = [p for p in model.parameters() if p.requires_grad] + list(mode_head.parameters())
+    opt = torch.optim.AdamW(params, lr=LR, weight_decay=0.0)
     total = CYCLE * 20 * EPOCHS
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=LR, total_steps=total, pct_start=0.1, anneal_strategy="cos")
     t0 = time.perf_counter(); step = 0
@@ -118,13 +119,14 @@ def main() -> None:
                 else:
                     loss = text_loss("mouth", random.choice(mouth_rows)); ml = al = 0.0
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
                 opt.step(); sched.step(); step += 1
                 if step % 20 == 0:
                     print({"step": step, "kind": kind, "loss": round(float(loss.detach()), 3),
                            "mode": round(ml, 2), "audio": round(al, 2), "s": round(time.perf_counter() - t0, 1)}, flush=True)
     JOINT.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(JOINT / "lora")
+    torch.save(mode_head.state_dict(), JOINT / "mode_head.pt")
     print("saved", JOINT / "lora", "steps", step, "peak", round(torch.cuda.max_memory_allocated() / 1e9, 2))
 
 

@@ -38,8 +38,8 @@ Large corpora stay outside:
 | Mouth | 92.5% exact, 2.77 w/s |
 | Continuity injection | 90% B present, 98.3% recall, median 0 ms gap |
 | Hard switch | 11/12 B, median 0 ms gap |
-| Joint duplex pilot | **failed**: 0/63 speak frames on an agent-turn window |
-| Cause | 30–40% of “speak” labels were silent in the re-voiced agent; 50 windows only |
+| Duplex policy | **works**: 0/63 while user speaks, 8–37/63 on agent turn; injection exact |
+| Remaining gap | audio-only agent speech loops/fragments; needs a text plan in the agent slot |
 
 ## Next
 

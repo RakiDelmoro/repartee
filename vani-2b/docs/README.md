@@ -19,8 +19,8 @@ One 2B speech model for live conversation and harness-supplied answers.
 | Mouth adapter | **works**: 92.5% exact, 2.77 words/s |
 | Continuity injection | **works**: 90% answer present, 98.3% recall, median 0 ms join |
 | Hard switch | **works**: 11/12 answer present, median 0 ms join |
-| Joint duplex pilot | **fails**: 0/63 speak frames on an agent-turn window |
-| Cause | 50 windows from 5 short conversations; labels partially silent; no turn-boundary sampling |
+| Joint duplex policy | **works**: 0/63 speak while user speaks, 60/63 on agent turn (greedy: 8/63) |
+| Remaining gap | audio-only agent speech loops or produces a fragment; needs a text plan in the agent slot |
 | Current work | re-voice 30–60 min of Open Yap, turn-boundary cache, retrain, re-check |
 
 Rules for this folder:

@@ -42,6 +42,8 @@ If it fails again: add a fixed role context, then more data. Do not scale.
 - [ ] turn-boundary cache
 - [ ] joint retrain
 - [x] five-check sheet (current result: fail)
-- [ ] fix duplex and re-run checks
+- [x] duplex timing: policy head + VAD features
+- [ ] add a text plan to the agent slot (fix audio content)
+- [ ] re-run checks with content
 - [ ] scale re-voicing and full-corpus run
 - [ ] runtime controller and paid-harness integration
