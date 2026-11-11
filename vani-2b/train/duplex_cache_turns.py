@@ -19,7 +19,7 @@ TTS = Path("data/open-yap/pilot_tts")
 OUT = Path("data/probe/duplex/cache_turns")
 SR_U, SR_A = 16_000, 24_000
 FRAMES = 63
-PER_CONV = 12
+PER_CONV = 100
 
 
 def main() -> None:
@@ -54,7 +54,10 @@ def main() -> None:
         for s in range(0, n - FRAMES, 25):
             if a_speak[s:s + FRAMES].sum() > 20:
                 starts.append(s)
-        starts = sorted(set(starts))[:PER_CONV]
+        starts = sorted(set(starts))
+        if len(starts) > PER_CONV:
+            idx = np.linspace(0, len(starts) - 1, PER_CONV).astype(int)
+            starts = [starts[i] for i in idx]
         if not starts:
             continue
         for s in starts:

@@ -17,10 +17,7 @@ from inject_probe import DEVICE, load
 PILOT = Path("data/open-yap/pilot")
 OUT = Path("data/open-yap/pilot_tts")
 SR = 24_000
-CONVS = ["conv_a69239616d4e", "conv_3e2001c6b7e9", "conv_96c9e53e9310",
-         "conv_63a80d7053c1", "conv_714ff6b8cd50", "conv_79be53d2a257",
-         "conv_cd9656663384", "conv_eec711c3ca25", "conv_6f1d55110124",
-         "conv_31a410c2d2ed", "conv_0e7dab27dc32"]
+CONVS = sorted(p.name for p in (PILOT / "conversations").glob("conv_*"))
 MIN_GAP = 0.4
 
 

@@ -19,3 +19,4 @@ Append-only. Status values: accepted, superseded, rejected.
 | D013 | 2026-11-10 | Do not scale to 1,000 h until the five checks pass | Duplex pilot failed; scaling now would multiply a broken behaviour | accepted |
 | D014 | 2026-11-10 | Open Yap DUA: commercial training allowed; no redistribution, no voice clones | Licence terms; product voice comes from the TTS teacher | accepted |
 | D015 | 2026-11-10 | Local 8 GB for pilots; rented 24–48 GB for full training | 5.43 GB for 5 s duplex windows; full corpus is compute-bound | accepted |
+| D016 | 2026-11-11 | Duplex is pure audio in / audio out; no control tokens, no mode head | The model must learn turn-taking and silence from conversation audio itself; tokens are a text shortcut | accepted, supersedes the token/head pilot |

@@ -17,7 +17,7 @@ Duplex is one pair per 80 ms:
 ```
 
 - `U_t` — user audio token from the frozen encoder.
-- `A_t` — `listen`, `hold`, `backchannel`, `interrupt`, a text token, or a speech frame.
+- `A_t` — an audio frame. Silence frames mean listening; short speech frames are backchannels. No control tokens, no text in duplex.
 - Loss on `A` only. `U` is context.
 
 Injection enters the same `A` slot:
