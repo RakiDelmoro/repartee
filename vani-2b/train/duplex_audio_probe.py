@@ -114,7 +114,8 @@ def main() -> None:
         out_path = OUT / f"{path.stem}.wav"
         if len(audio) < 1600:
             audio = np.zeros(1600, dtype=np.float32)
-        sf.write(out_path, audio, OUT_SR)
+        if SAVE_WAV:
+            sf.write(out_path, audio, OUT_SR)
         got = speech_frames(audio)
         print("frames", len(modes), "speech_frames", got, flush=True)
         report.append({"id": path.stem, "b_speak": b, "agent_speak": s, "frames": len(modes),

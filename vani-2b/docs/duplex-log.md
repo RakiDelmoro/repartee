@@ -34,6 +34,15 @@ reconstructing it from chat.
 | 2026-11-12 | Voice validation samples | 6 generated lines + real re-voiced clip | Current Vani voice is the LFM3 TTS voice; filenames are not style conditions |
 | 2026-11-12 | Commit and push duplex code | `32d94e7` | Reproducible branch state |
 
+## Cleanup — 2026-11-12
+
+- Removed the duplicate `speaker_a.flac` root artifact, `.pytest_cache`, and stray
+  `__pycache__` directories.
+- Pruned stale probe output: kept only `data/probe/samples/vani_voice/`,
+  `vani_voice.wav`, and `vani_voice_audio.wav`.
+- Probe scripts no longer write one WAV per window by default. Set `SAVE_WAV=1` when
+  a listening sample is wanted; `report.json` is always written.
+
 ## Current state
 
 - Base switched to **LFM3-Audio-2B** (audio-native encoder/codec, no vision).

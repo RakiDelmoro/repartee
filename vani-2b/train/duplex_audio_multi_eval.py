@@ -26,6 +26,7 @@ OUT = Path("data/probe/samples/duplex_multi")
 SR = 16000
 OUT_SR = 24000
 N = int(os.environ.get("N", "10"))
+SAVE_WAV = os.environ.get("SAVE_WAV", "0") == "1"
 
 
 def speech_frames(wav: np.ndarray, sr: int = OUT_SR) -> int:
@@ -126,8 +127,9 @@ def main() -> None:
                         onset = i; break
             rows.append({"id": path.stem, "label_speak": label, "out_speak": got,
                          "frames": n, "ratio": round(got / max(n, 1), 3), "onset": onset})
-            OUT.mkdir(parents=True, exist_ok=True)
-            sf.write(OUT / f"{name}_{path.stem}.wav", audio, OUT_SR)
+            if SAVE_WAV:
+                OUT.mkdir(parents=True, exist_ok=True)
+                sf.write(OUT / f"{name}_{path.stem}.wav", audio, OUT_SR)
             print(name, path.stem, "label", label, "out", got, "onset", onset, flush=True)
         ratios = [r["ratio"] for r in rows]
         report[name] = {
