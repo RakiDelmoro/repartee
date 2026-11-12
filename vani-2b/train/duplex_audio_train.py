@@ -97,7 +97,7 @@ def main() -> None:
     if OVERFIT:
         speech = [p for p in files if int(np.load(p)["speak"].sum()) >= 45][:OVERFIT]
         user = [p for p in files if int(np.load(p)["b_speak"].sum()) >= 30 and int(np.load(p)["speak"].sum()) <= 10][:OVERFIT]
-        files = speech + user
+        files = speech if MODE == "speech" else speech + user
     print({"mode": MODE, "init": INIT or None, "windows": len(files), "mask_eos": MASK_EOS, "mix": MIX, "repeat_speech": REPEAT_SPEECH}, flush=True)
     for epoch in range(EPOCHS):
         random.shuffle(files)

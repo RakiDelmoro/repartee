@@ -111,6 +111,12 @@ dedicated TTS/voice reference, outside duplex training.
 - E022: 10-window overfit still failed (loss 0.610; user median 0.0, agent 0.032).
   The model cannot memorize ten alternated windows. Next isolation: speech-only
   overfit; if that also fails, the audio objective/head is the blocker, not data volume.
+- E023: speech-only 5-window overfit also failed (loss 0.877; agent median 0.032,
+  40% any speech). The model cannot memorize five speaking windows under the current
+  adaptation. Scale is not justified. Two hypotheses remain: insufficient adaptation
+  capacity, or pure-audio A slots are out of domain for an interleaved text+speech
+  pretraining. A text-conditioned diagnostic can separate them, but it conflicts with
+  the no-text duplex requirement and must be treated as a diagnostic only.
 - Do not add control tokens or a mode head to hide the failure.
 - Keep every result, including failures, in this file and in
   [experiments.md](experiments.md).

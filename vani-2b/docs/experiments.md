@@ -26,6 +26,7 @@ Append-only. Every result, including failures, with the data and the verdict.
 | E020 | 2026-11-12 | Full audio-depth-decoder fine-tune | 83.9M depth params, same 80 windows | loss NaN from epoch 0; most steps skipped | numerical failure, not a model result |
 | E021 | 2026-11-12 | Depth-decoder LoRA | same 80 windows, 20 epochs | loss 2.095 → 0.812; user median 0.048, agent 0.048, boundary 0.048 | overfit still fails |
 | E022 | 2026-11-12 | Tiny 10-window overfit | 5 speech + 5 user windows, depth LoRA, 30 epochs | loss 2.238 → 0.610; user median 0.0, agent 0.032, boundary 0.032 | cannot memorize 10 windows |
+| E023 | 2026-11-12 | Speech-only tiny overfit | 5 speech windows, depth LoRA, 30 epochs | loss 3.25 → 0.877; agent median 0.032, 40% any speech; user quiet | cannot memorize 5 speaking windows |
 
 ## Interpretation
 
@@ -56,6 +57,11 @@ Append-only. Every result, including failures, with the data and the verdict.
   overfit and the oracle turn-state probe before any scale run.
 - E022 cannot memorize 10 windows either. With only ~600 training steps and a depth
   LoRA, the model still does not separate speech from silence. This points at the
-  adaptation/objective or data alignment, not data scale. Speech-only overfit is the
-  next isolation: if that also fails, the pure-audio objective needs revision before
-  any full-corpus run.
+  adaptation/objective or data alignment, not data scale.
+- E023 also fails on five speech-only windows (loss 0.877, 40% any speech). The model
+  cannot memorize a handful of pure-audio speech targets with the current adaptation.
+  Scale is therefore not justified. The next question is whether the limitation is
+  capacity (higher rank/full head) or the pure-audio objective itself; LFM3 was
+  pretrained on interleaved text+speech, so audio-only A slots may be out of domain.
+  A diagnostic text-conditioned run would separate those causes, but it conflicts with
+  the current no-text duplex requirement.
