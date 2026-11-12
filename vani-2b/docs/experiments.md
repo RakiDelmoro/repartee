@@ -25,6 +25,7 @@ Append-only. Every result, including failures, with the data and the verdict.
 | E019 | 2026-11-12 | Tiny overfit diagnostic | 40 speech + 40 user-silent windows, 20 epochs | loss 2.12 → 0.981; same windows: user median 0.032, agent 0.024, boundary 0.024 | fail, cannot fit both cleanly |
 | E020 | 2026-11-12 | Full audio-depth-decoder fine-tune | 83.9M depth params, same 80 windows | loss NaN from epoch 0; most steps skipped | numerical failure, not a model result |
 | E021 | 2026-11-12 | Depth-decoder LoRA | same 80 windows, 20 epochs | loss 2.095 → 0.812; user median 0.048, agent 0.048, boundary 0.048 | overfit still fails |
+| E022 | 2026-11-12 | Tiny 10-window overfit | 5 speech + 5 user windows, depth LoRA, 30 epochs | loss 2.238 → 0.610; user median 0.0, agent 0.032, boundary 0.032 | cannot memorize 10 windows |
 
 ## Interpretation
 
@@ -53,3 +54,8 @@ Append-only. Every result, including failures, with the data and the verdict.
 - E021 is stable but still cannot overfit both behaviours on 80 windows. The bottleneck
   is not only data volume. The next diagnostics are a higher-capacity/smaller-set
   overfit and the oracle turn-state probe before any scale run.
+- E022 cannot memorize 10 windows either. With only ~600 training steps and a depth
+  LoRA, the model still does not separate speech from silence. This points at the
+  adaptation/objective or data alignment, not data scale. Speech-only overfit is the
+  next isolation: if that also fails, the pure-audio objective needs revision before
+  any full-corpus run.

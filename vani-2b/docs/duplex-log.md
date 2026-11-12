@@ -108,6 +108,9 @@ dedicated TTS/voice reference, outside duplex training.
   smaller set (e.g., 5 speech + 5 user windows) with higher LoRA rank, plus the oracle
   turn-state probe. If neither fits, the pure-audio objective/architecture needs
   revision before scale.
+- E022: 10-window overfit still failed (loss 0.610; user median 0.0, agent 0.032).
+  The model cannot memorize ten alternated windows. Next isolation: speech-only
+  overfit; if that also fails, the audio objective/head is the blocker, not data volume.
 - Do not add control tokens or a mode head to hide the failure.
 - Keep every result, including failures, in this file and in
   [experiments.md](experiments.md).
