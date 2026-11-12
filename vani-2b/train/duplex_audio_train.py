@@ -36,6 +36,11 @@ INIT = os.environ.get("INIT", "")
 EPOCHS = int(os.environ.get("EPOCHS", "6"))
 MIX = os.environ.get("MIX", "1") == "1"
 MASK_EOS = os.environ.get("MASK_EOS", "0") == "1"
+REPEAT_SPEECH = int(os.environ.get("REPEAT_SPEECH", "0"))
+OVERFIT = int(os.environ.get("OVERFIT", "0"))
+TRAIN_DEPTH = os.environ.get("TRAIN_DEPTH", "0") == "1"
+DEPTH_LORA = os.environ.get("DEPTH_LORA", "0") == "1"
+DEPTH_LR = float(os.environ.get("DEPTH_LR", "1e-5"))
 LR = float(os.environ.get("LR", "1e-4"))
 SEED = 0
 
@@ -62,17 +67,38 @@ def main() -> None:
     cont = PeftModel.from_pretrained(sw, CT / "lora_v2").merge_and_unload()
     if INIT:
         cont = PeftModel.from_pretrained(cont, Path(INIT)).merge_and_unload()
+    target = r"model\.language_model\..*\.(q_proj|k_proj|v_proj|o_proj|in_proj|out_proj|w1|w2|w3)"
+    if DEPTH_LORA:
+        target += r"|model\.depth_decoder\..*\.(q_proj|k_proj|v_proj|o_proj|in_proj|out_proj|w1|w2|w3|depth_linear|logits)"
     model = get_peft_model(cont, LoraConfig(
         r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
-        target_modules=r"model\.language_model\..*\.(q_proj|k_proj|v_proj|o_proj|in_proj|out_proj|w1|w2|w3)",
+        target_modules=target,
     ))
     base = model.base_model.model
+    if TRAIN_DEPTH:
+        for p in base.model.depth_decoder.parameters():
+            p.requires_grad = True
+        n_depth = sum(p.numel() for p in base.model.depth_decoder.parameters())
+        print({"train_depth": True, "depth_params": n_depth}, flush=True)
     eos = int(base.config.audio_eos_code)
     embed = base.get_input_embeddings()
     bos = embed(torch.tensor([[base.config.text_config.bos_token_id]], device=DEVICE))[0, 0]
-    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=LR, weight_decay=0.0)
+    depth_ids = {id(p) for p in base.model.depth_decoder.parameters()} if TRAIN_DEPTH else set()
+    lora_params = [p for p in model.parameters() if p.requires_grad and id(p) not in depth_ids]
+    depth_params = [p for p in model.parameters() if p.requires_grad and id(p) in depth_ids]
+    groups = [{"params": lora_params, "lr": LR}]
+    if depth_params:
+        groups.append({"params": depth_params, "lr": DEPTH_LR})
+    opt = torch.optim.AdamW(groups, weight_decay=0.0)
     files = [p for p in sorted(CACHE.glob("*.npz")) if keep(p)]
-    print({"mode": MODE, "init": INIT or None, "windows": len(files), "mask_eos": MASK_EOS, "mix": MIX}, flush=True)
+    if REPEAT_SPEECH:
+        heavy = [p for p in files if int(np.load(p)["speak"].sum()) >= 45]
+        files += heavy * REPEAT_SPEECH
+    if OVERFIT:
+        speech = [p for p in files if int(np.load(p)["speak"].sum()) >= 45][:OVERFIT]
+        user = [p for p in files if int(np.load(p)["b_speak"].sum()) >= 30 and int(np.load(p)["speak"].sum()) <= 10][:OVERFIT]
+        files = speech + user
+    print({"mode": MODE, "init": INIT or None, "windows": len(files), "mask_eos": MASK_EOS, "mix": MIX, "repeat_speech": REPEAT_SPEECH}, flush=True)
     for epoch in range(EPOCHS):
         random.shuffle(files)
         mix_p = 0.10 + 0.25 * epoch / max(EPOCHS - 1, 1) if MIX else 0.0
@@ -118,6 +144,8 @@ def main() -> None:
             ce = F.cross_entropy(logits.transpose(1, 2).float(), codes, reduction="none")
             w = torch.where(speak, 1.0, 0.3)
             loss = (ce.mean(-1) * w).mean()
+            if not torch.isfinite(loss):
+                opt.zero_grad(); print("skip non-finite", flush=True); continue
             opt.zero_grad(); loss.backward()
             torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
             opt.step()

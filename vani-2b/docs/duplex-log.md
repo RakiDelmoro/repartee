@@ -101,10 +101,13 @@ dedicated TTS/voice reference, outside duplex training.
 - The tiny overfit test (E019) also failed to fit both behaviours cleanly on its own
   80 windows: loss 0.981, agent median 0.024, user median 0.032. This weakens the
   “only scale is missing” hypothesis.
-- Suspected bottleneck: the audio depth decoder is frozen; LoRA adapts only the
-  language model. E020 makes the depth decoder trainable and repeats the overfit
-  diagnostic. If E020 fits both on the tiny set, scale becomes a credible next step;
-  if not, the pure-audio objective/architecture needs revision before scale.
+- E020 full depth-decoder fine-tuning diverged (NaN) in fp16; E021 depth LoRA was
+  stable (loss 2.095 → 0.812) but still failed the same overfit probe (all categories
+  median 0.048). The model cannot cleanly memorize both behaviours even on 80 windows.
+- Conclusion: scale is not yet justified. The next step is a capability test on a much
+  smaller set (e.g., 5 speech + 5 user windows) with higher LoRA rank, plus the oracle
+  turn-state probe. If neither fits, the pure-audio objective/architecture needs
+  revision before scale.
 - Do not add control tokens or a mode head to hide the failure.
 - Keep every result, including failures, in this file and in
   [experiments.md](experiments.md).
