@@ -22,6 +22,8 @@ Append-only. Every result, including failures, with the data and the verdict.
 | E016 | 2026-11-11 | All-window EOS-masked | 1,605 windows, 4 epochs | loss 2.566 → 2.295; user 5, agent 0 speech | fail, speech lost |
 | E017 | 2026-11-12 | Speech oversampling | 2,700 samples, EOS masked, 4 epochs | loss 2.724 → 2.086; fair probe: user 0.0, agent 0.024, boundary 0.0 median speech ratio | fail, still mute on agent |
 | E018 | 2026-11-12 | Fair multi-window probe | 10 user, 10 agent, 10 boundary held-out windows | user 0/10 any-speech; agent 1/10 any-speech; boundary 0/10 | fail, quiet and mute |
+| E019 | 2026-11-12 | Tiny overfit diagnostic | 40 speech + 40 user-silent windows, 20 epochs | loss 2.12 → 0.981; same windows: user median 0.032, agent 0.024, boundary 0.024 | fail, cannot fit both cleanly |
+| E020 | 2026-11-12 | Audio-depth-decoder adaptation | same 80 windows, depth decoder trainable | planned | diagnostic |
 
 ## Interpretation
 
@@ -42,3 +44,6 @@ Append-only. Every result, including failures, with the data and the verdict.
 - E017/E018 rule out the single-window artefact: the oversampled adapter is quiet on
   user turns and still essentially mute on agent turns. Speech oversampling did not
   restore turn-taking. The next diagnostic is the tiny overfit test.
+- E019 fails the overfit test even on its own 80 windows. That weakens the “only scale”
+  hypothesis: a capacity/adaptation limit is likely. The LoRA currently adapts only
+  the language model; the audio depth decoder is frozen. E020 trains that decoder.

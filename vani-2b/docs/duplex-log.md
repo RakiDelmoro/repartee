@@ -98,9 +98,13 @@ dedicated TTS/voice reference, outside duplex training.
 ## Open decisions
 
 - The oversampling adapter failed the fair probe (agent median speech ratio 0.024).
-  Next: tiny overfit test (50 speech + 50 user-silent windows). If it cannot overfit
-  both, the objective is wrong; if it can, held-out failure points to data
-  composition/volume, not architecture.
+- The tiny overfit test (E019) also failed to fit both behaviours cleanly on its own
+  80 windows: loss 0.981, agent median 0.024, user median 0.032. This weakens the
+  “only scale is missing” hypothesis.
+- Suspected bottleneck: the audio depth decoder is frozen; LoRA adapts only the
+  language model. E020 makes the depth decoder trainable and repeats the overfit
+  diagnostic. If E020 fits both on the tiny set, scale becomes a credible next step;
+  if not, the pure-audio objective/architecture needs revision before scale.
 - Do not add control tokens or a mode head to hide the failure.
 - Keep every result, including failures, in this file and in
   [experiments.md](experiments.md).
