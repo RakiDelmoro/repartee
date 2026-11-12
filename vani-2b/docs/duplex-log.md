@@ -36,6 +36,12 @@ reconstructing it from chat.
 
 ## Current state
 
+- Base switched to **LFM3-Audio-2B** (audio-native encoder/codec, no vision).
+- The mouth, switch, and continuity LoRAs load on the new base.
+- The Omni cache is archived as `cache_turns_omni`; a fresh Audio cache is building.
+- Duplex adapters are still untrained on the new base.
+
+
 - Data: 20 conversations, ~7.2 h, 1,605 windows.
 - Adapters:
   - `audio_lora`: teacher-forced / scheduled; mute at inference.

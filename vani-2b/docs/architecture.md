@@ -2,8 +2,8 @@
 
 ## Base
 
-- **LFM3-Omni-2B**, 2.17B parameters, 32K context.
-- Frozen: audio encoder, audio projector, LiquidCodec, depthformer.
+- **LFM3-Audio-2B**, 2B parameters, 32K context.
+- Frozen: audio encoder, audio projector, LiquidCodec; audio depth decoder optional LoRA.
 - Trained: LoRA on the 24-layer LM, plus small control/output rows.
 - Audio format: 24 kHz output, 12.5 frames/s, 12 codebooks per 80 ms frame.
 - Interleaved text: 6 text slots then 12 speech frames per block.

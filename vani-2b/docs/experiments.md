@@ -65,3 +65,5 @@ Append-only. Every result, including failures, with the data and the verdict.
   pretrained on interleaved text+speech, so audio-only A slots may be out of domain.
   A diagnostic text-conditioned run would separate those causes, but it conflicts with
   the current no-text duplex requirement.
+| E024 | 2026-11-12 | Adapter transfer to LFM3-Audio-2B | mouth, switch, continuity LoRAs | all three load | compatibility pass; voice sample pending |
+| E025 | 2026-11-12 | Audio-2B cache rebuild | 20 conversations, 80 ms frames | running | pending |

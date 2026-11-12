@@ -4,7 +4,7 @@ Append-only. Status values: accepted, superseded, rejected.
 
 | ID | Date | Decision | Why | Status |
 |---|---|---|---|---|
-| D001 | 2026-11-10 | Base model LFM3-Omni-2B | 2.17B fits 8 GB; speech in/out; interleaved text+speech; 32K context | accepted |
+| D001 | 2026-11-10 | Base model LFM3-Audio-2B | 2.17B fits 8 GB; speech in/out; interleaved text+speech; 32K context | accepted |
 | D002 | 2026-11-10 | LoRA only; freeze encoder, projector, codec, depthformer | Fits memory; preserves voice; the mouth is a small adaptation | accepted |
 | D003 | 2026-11-10 | Mouth adapter trained on the model’s own TTS | One voice; no external voice licence; 722 clauses produced 92.5% exact | accepted |
 | D004 | 2026-11-10 | Hard switch first: force text, close, run speech tail | Fastest path to the injected-answer behaviour | accepted, then improved by D005 |
@@ -25,3 +25,6 @@ Append-only. Status values: accepted, superseded, rejected.
 | D019 | 2026-11-12 | Scale only after overfit + held-out + data-scaling curve + oracle diagnostics | Prevents multiplying a collapsed objective; separates capability from data volume | accepted |
 | D020 | 2026-11-12 | Voice system prompt is separate from duplex training | Duplex never sees text; the TTS prompt conditions the voice path only | accepted |
 | D021 | 2026-11-12 | Record every duplex decision, experiment, and plan in `duplex-log.md` | The user needs a readable trail during and after the project | accepted |
+| D022 | 2026-11-12 | Switch the base model from LFM3-Omni-2B to LFM3-Audio-2B | Audio-native encoder/codec; no vision path; streaming voice chat; closer to Vani than Omni | accepted |
+| D023 | 2026-11-12 | Rebuild the duplex cache with Audio-2B’s encoder/codec | Omni cache embeddings/codes are base-specific; old cache kept as `cache_turns_omni` | accepted |
+| D024 | 2026-11-12 | Reuse the mouth/switch/continuity LoRAs if they load on Audio-2B | Adapter transfer passed; avoids retraining the voice layer | accepted, voice sample pending |

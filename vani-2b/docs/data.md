@@ -42,6 +42,6 @@
 
 | Asset | Use |
 |---|---|
-| LFM3-Omni-2B | LFM Open License v1.0; commercial under $10M revenue |
+| LFM3-Audio-2B | LFM Open License v1.0; commercial under $10M revenue |
 | Open Yap | DUA; commercial training, no redistribution/clones |
 | Qwen3-ASR | judge only; not shipped in runtime |
