@@ -28,7 +28,8 @@ reconstructing it from chat.
 | 2026-11-11 | Curriculum A: speech-only, 365 windows, EOS masked, 6 epochs | Loss 4.118 → 3.320 | Agent window 85 speech frames; content repetitive but speaking behaviour exists |
 | 2026-11-11 | Curriculum B: speech + 43 user-silent windows, EOS allowed, 3 epochs | Loss 2.895 → 2.704 | Both probe windows 0 speech; mute returned |
 | 2026-11-11 | Curriculum C: all 1,605 windows, EOS masked, 4 epochs | Loss 2.566 → 2.295 | User window 5 speech frames, agent window 0; speech lost again |
-| 2026-11-12 | Speech oversampling: all windows + speech-heavy ×3, 2,700 samples, EOS masked, 4 epochs | Epoch 2 loss 2.266; run still active | Probe pending; no verdict |
+| 2026-11-12 | Speech oversampling: all windows + speech-heavy ×3, 2,700 samples, EOS masked, 4 epochs | Loss 2.724 → 2.086 | Saved `audio_lora_balanced` |
+| 2026-11-12 | Fair multi-window probe | User median 0.0; agent 0.024; boundary 0.0 speech ratio | Quiet on user turns, still mute on agent turns; oversampling insufficient |
 | 2026-11-12 | Add fair multi-window probe | User/agent/boundary categories; distributions, not one window | Probe code: `vani-2b/train/duplex_audio_multi_eval.py` |
 | 2026-11-12 | Voice validation samples | 6 generated lines + real re-voiced clip | Current Vani voice is the LFM3 TTS voice; filenames are not style conditions |
 | 2026-11-12 | Commit and push duplex code | `32d94e7` | Reproducible branch state |
@@ -41,7 +42,7 @@ reconstructing it from chat.
   - `audio_lora_speech`: speech-only; speaks, repetitive, would over-talk.
   - `audio_lora_listen`: speech + user-silent; mute at inference.
   - `audio_lora_all`: all windows, EOS masked; user near-silent, agent mute.
-  - `audio_lora_balanced`: oversampling run; in progress.
+  - `audio_lora_balanced`: oversampling run; quiet on user, essentially mute on agent.
 - No adapter yet shows both listening and speaking in the same checkpoint.
 - Injection/continuity path is separate and unaffected.
 
@@ -96,10 +97,10 @@ dedicated TTS/voice reference, outside duplex training.
 
 ## Open decisions
 
-- If oversampling passes the fair probe: scale data, keep the balance, then test
-  injection and seam.
-- If it fails: run overfit and oracle probes; if those pass, the problem is data
-  composition/scale; if they fail, the objective or architecture is wrong.
+- The oversampling adapter failed the fair probe (agent median speech ratio 0.024).
+  Next: tiny overfit test (50 speech + 50 user-silent windows). If it cannot overfit
+  both, the objective is wrong; if it can, held-out failure points to data
+  composition/volume, not architecture.
 - Do not add control tokens or a mode head to hide the failure.
 - Keep every result, including failures, in this file and in
   [experiments.md](experiments.md).

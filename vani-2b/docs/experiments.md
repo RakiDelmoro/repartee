@@ -20,7 +20,8 @@ Append-only. Every result, including failures, with the data and the verdict.
 | E014 | 2026-11-11 | Speech-only curriculum | 365 speech windows, EOS masked, 6 epochs | loss 4.118 → 3.320; agent 85 speech frames; repetitive | speaking pass, content fail |
 | E015 | 2026-11-11 | Listen curriculum | 408 windows, EOS allowed, 3 epochs | loss 2.895 → 2.704; both probe windows 0 speech | fail, mute |
 | E016 | 2026-11-11 | All-window EOS-masked | 1,605 windows, 4 epochs | loss 2.566 → 2.295; user 5, agent 0 speech | fail, speech lost |
-| E017 | 2026-11-12 | Speech oversampling | 2,700 samples, EOS masked, 4 epochs | epoch 2 loss 2.266; probe pending | running |
+| E017 | 2026-11-12 | Speech oversampling | 2,700 samples, EOS masked, 4 epochs | loss 2.724 → 2.086; fair probe: user 0.0, agent 0.024, boundary 0.0 median speech ratio | fail, still mute on agent |
+| E018 | 2026-11-12 | Fair multi-window probe | 10 user, 10 agent, 10 boundary held-out windows | user 0/10 any-speech; agent 1/10 any-speech; boundary 0/10 | fail, quiet and mute |
 
 ## Interpretation
 
@@ -38,3 +39,6 @@ Append-only. Every result, including failures, with the data and the verdict.
 - E017 tests whether speech oversampling keeps both behaviours. No verdict yet.
 - Fair evaluation is now multi-window and distribution-based, not one window
   (`duplex_audio_multi_eval.py`).
+- E017/E018 rule out the single-window artefact: the oversampled adapter is quiet on
+  user turns and still essentially mute on agent turns. Speech oversampling did not
+  restore turn-taking. The next diagnostic is the tiny overfit test.
