@@ -13,7 +13,7 @@ import torch
 sys.path.insert(0, "vani-2b/train")
 from inject_probe import DEVICE
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 PILOT = Path("data/open-yap/pilot")
 OUT = Path("data/probe/duplex/cache")
 SR_U, SR_A = 16_000, 24_000

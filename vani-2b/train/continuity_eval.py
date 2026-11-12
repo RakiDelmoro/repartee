@@ -16,7 +16,7 @@ sys.path.insert(0, "vani-2b/train")
 from inject_probe import DEVICE
 from mouth_asr import norm, wer
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 OUT = CT / "eval"

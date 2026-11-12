@@ -12,7 +12,7 @@ Vani does two things in one voice:
 The harness may call a paid model for reasoning and the knowledge base. Vani is
 the mouth, not the brain.
 
-Base: LFM3-Omni-2B, frozen encoders/codec, LoRA adapters.
+Base: LFM3-Audio-2B, frozen encoders/codec, LoRA adapters.
 
 Documentation: [`docs/`](docs/README.md) — end goal, architecture, decisions, experiments, plan, evaluation, data.
 

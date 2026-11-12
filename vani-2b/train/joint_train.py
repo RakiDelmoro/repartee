@@ -20,7 +20,7 @@ from inject_probe import DEVICE
 from continuity_train import build as ct_build
 from mouth_train import build as mouth_build
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 DUP = Path("data/probe/duplex")

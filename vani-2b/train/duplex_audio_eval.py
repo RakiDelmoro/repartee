@@ -17,7 +17,7 @@ from inject_probe import DEVICE
 from joint_eval import sample_audio_frame
 from app.asr import ASR
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 DUP = Path("data/probe/duplex")

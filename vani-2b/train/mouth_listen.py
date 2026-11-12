@@ -15,7 +15,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "vani-2b/train")
 from inject_probe import DEVICE
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 OUT = ROOT / "listen"
 SR = 24_000

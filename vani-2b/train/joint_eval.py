@@ -19,7 +19,7 @@ from inject_probe import DEVICE
 from continuity_eval import b_ratio, gap_ms, synth as ct_synth
 from mouth_asr import norm
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 JOINT = Path("data/probe/duplex/joint")

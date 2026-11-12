@@ -18,7 +18,7 @@ from inject_probe import DEVICE
 from audio_trim import trim_codes
 from switch_train import switch_example
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 EPOCHS = 2

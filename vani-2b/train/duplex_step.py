@@ -16,7 +16,7 @@ from transformers import AutoModelForMultimodalLM, AutoProcessor
 sys.path.insert(0, "vani-2b/train")
 from inject_probe import DEVICE
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 CONV = Path("data/open-yap/pilot/conversations/conv_cd9656663384")
 LABELS = Path("data/open-yap/pilot/labels/conv_cd9656663384.npz")
 SECONDS = 5.0

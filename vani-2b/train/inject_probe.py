@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Block-synchronous text injection probe for LFM3-Omni-2B.
+"""Block-synchronous text injection probe for LFM3-Audio-2B.
 
 Interleaved generation is 6 text slots followed by 12 speech frames
 (80 ms each = 960 ms). This script forces a target clause into the text
@@ -22,7 +22,7 @@ import soundfile as sf
 import torch
 from transformers import AutoModelForMultimodalLM, AutoProcessor, DynamicCache
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 OUT = Path("data/probe")
 DEVICE = "cuda"
 N_TEXT = 6
