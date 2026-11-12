@@ -40,6 +40,10 @@ reconstructing it from chat.
 - The mouth, switch, and continuity LoRAs load on the new base.
 - The Omni cache is archived as `cache_turns_omni`; a fresh Audio cache is building.
 - Duplex adapters are still untrained on the new base.
+- Audio-2B speech-only overfit over-talks; mixed overfit goes silent. The same
+  capability/objective pattern as Omni. Base swap alone did not fix it.
+- Evaluator fixed to count speech frames at 24 kHz (was 16 kHz). Earlier ratios were
+  inflated; this does not change the qualitative failures.
 
 
 - Data: 20 conversations, ~7.2 h, 1,605 windows.

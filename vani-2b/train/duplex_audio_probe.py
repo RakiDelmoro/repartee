@@ -17,17 +17,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from inject_probe import DEVICE
 from app.asr import QwenTranscriber
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 DUP = Path("data/probe/duplex")
-AUDIO = DUP / "audio_lora"
+AUDIO = DUP / os.environ.get("AUDIO_DIR", "audio_lora")
 CACHE = DUP / "cache_turns"
 OUT = Path("data/probe/samples/duplex_audio")
 SR = 16000
+OUT_SR = 24000
 
 
-def speech_frames(wav: np.ndarray, sr: int = SR) -> int:
+def speech_frames(wav: np.ndarray, sr: int = OUT_SR) -> int:
     hop = int(0.08 * sr); n = len(wav) // hop
     return sum(float(np.sqrt(np.mean(wav[i * hop:(i + 1) * hop] ** 2))) > 0.01 for i in range(n))
 
@@ -113,7 +114,7 @@ def main() -> None:
         out_path = OUT / f"{path.stem}.wav"
         if len(audio) < 1600:
             audio = np.zeros(1600, dtype=np.float32)
-        sf.write(out_path, audio, SR)
+        sf.write(out_path, audio, OUT_SR)
         got = speech_frames(audio)
         print("frames", len(modes), "speech_frames", got, flush=True)
         report.append({"id": path.stem, "b_speak": b, "agent_speak": s, "frames": len(modes),

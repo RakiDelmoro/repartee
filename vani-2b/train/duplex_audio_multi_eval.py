@@ -16,7 +16,7 @@ sys.path.insert(0, "vani-2b/train")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from inject_probe import DEVICE
 
-MODEL_ID = "models/LFM3-Omni-2B-hf"
+MODEL_ID = "models/LFM3-Audio-2B-hf"
 ROOT = Path("data/probe/mouth")
 CT = ROOT / "continuity"
 DUP = Path("data/probe/duplex")
@@ -24,10 +24,11 @@ AUDIO = DUP / os.environ.get("AUDIO_DIR", "audio_lora")
 CACHE = DUP / "cache_turns"
 OUT = Path("data/probe/samples/duplex_multi")
 SR = 16000
+OUT_SR = 24000
 N = int(os.environ.get("N", "10"))
 
 
-def speech_frames(wav: np.ndarray, sr: int = SR) -> int:
+def speech_frames(wav: np.ndarray, sr: int = OUT_SR) -> int:
     hop = int(0.08 * sr); n = len(wav) // hop
     return sum(float(np.sqrt(np.mean(wav[i * hop:(i + 1) * hop] ** 2))) > 0.01 for i in range(n))
 
@@ -119,14 +120,14 @@ def main() -> None:
             label = int(d["speak"].sum())
             onset = None
             if name == "boundary":
-                hop = int(0.08 * SR); m = len(audio) // hop
+                hop = int(0.08 * OUT_SR); m = len(audio) // hop
                 for i in range(n // 2, m):
                     if float(np.sqrt(np.mean(audio[i * hop:(i + 1) * hop] ** 2))) > 0.01:
                         onset = i; break
             rows.append({"id": path.stem, "label_speak": label, "out_speak": got,
                          "frames": n, "ratio": round(got / max(n, 1), 3), "onset": onset})
             OUT.mkdir(parents=True, exist_ok=True)
-            sf.write(OUT / f"{name}_{path.stem}.wav", audio, SR)
+            sf.write(OUT / f"{name}_{path.stem}.wav", audio, OUT_SR)
             print(name, path.stem, "label", label, "out", got, "onset", onset, flush=True)
         ratios = [r["ratio"] for r in rows]
         report[name] = {

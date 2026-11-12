@@ -65,5 +65,13 @@ Append-only. Every result, including failures, with the data and the verdict.
   pretrained on interleaved text+speech, so audio-only A slots may be out of domain.
   A diagnostic text-conditioned run would separate those causes, but it conflicts with
   the current no-text duplex requirement.
+- E024–E028 migrate to LFM3-Audio-2B: adapters transfer, cache rebuilds, voice works.
+  But the behaviour is the same: speech-only overfits to talk everywhere; mixed
+  overfits to silence. The base swap did not fix the capability/objective problem.
+  Also fixed the evaluator: decoded audio is 24 kHz, not 16 kHz.
+
 | E024 | 2026-11-12 | Adapter transfer to LFM3-Audio-2B | mouth, switch, continuity LoRAs | all three load | compatibility pass; voice sample pending |
 | E025 | 2026-11-12 | Audio-2B cache rebuild | 20 conversations, 80 ms frames | running | pending |
+| E026 | 2026-11-12 | Audio-2B cache rebuild | 20 conversations, Audio encoder/codec | 1,594 windows; Omni cache archived | done |
+| E027 | 2026-11-12 | Audio-2B speech-only 5-window overfit | 5 speech windows, 30 epochs | loss 5.396 → 1.379; probe outputs speech on 100% of windows, including user windows | over-talks, cannot separate |
+| E028 | 2026-11-12 | Audio-2B mixed 10-window overfit | 5 speech + 5 user windows, 30 epochs | loss 3.779 → 0.943; user median 0.063, agent median 0.0, boundary median 0.0 | same collapse as Omni |
