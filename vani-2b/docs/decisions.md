@@ -20,3 +20,8 @@ Append-only. Status values: accepted, superseded, rejected.
 | D014 | 2026-11-10 | Open Yap DUA: commercial training allowed; no redistribution, no voice clones | Licence terms; product voice comes from the TTS teacher | accepted |
 | D015 | 2026-11-10 | Local 8 GB for pilots; rented 24–48 GB for full training | 5.43 GB for 5 s duplex windows; full corpus is compute-bound | accepted |
 | D016 | 2026-11-11 | Duplex is pure audio in / audio out; no control tokens, no mode head | The model must learn turn-taking and silence from conversation audio itself; tokens are a text shortcut | accepted, supersedes the token/head pilot |
+| D017 | 2026-11-12 | EOS is the codec's end-of-audio code, not a listen token | Teacher forcing hides the model's own EOS; masking it forces speech everywhere | accepted |
+| D018 | 2026-11-12 | A single window is a smoke test, never a verdict | 2B model, 7.2 h data, one window is sampling noise; agent-rich windows may start mid-turn | accepted |
+| D019 | 2026-11-12 | Scale only after overfit + held-out + data-scaling curve + oracle diagnostics | Prevents multiplying a collapsed objective; separates capability from data volume | accepted |
+| D020 | 2026-11-12 | Voice system prompt is separate from duplex training | Duplex never sees text; the TTS prompt conditions the voice path only | accepted |
+| D021 | 2026-11-12 | Record every duplex decision, experiment, and plan in `duplex-log.md` | The user needs a readable trail during and after the project | accepted |

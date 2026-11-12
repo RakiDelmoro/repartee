@@ -8,20 +8,22 @@ One 2B speech model for live conversation and harness-supplied answers.
 | [architecture.md](architecture.md) | model, stream layout, injection, voice, runtime |
 | [decisions.md](decisions.md) | every decision, with rationale and status |
 | [experiments.md](experiments.md) | every experiment and result, including failures |
+| [duplex-log.md](duplex-log.md) | chronological duplex decisions, failures, probe design, and scaling plan |
 | [plan.md](plan.md) | phases, gates, current todo |
 | [evaluation.md](evaluation.md) | the five checks and how to run them |
 | [data.md](data.md) | corpora, licenses, paths, layouts |
 
-## Status snapshot — 2026-11-10
+## Status snapshot — 2026-11-12
 
 | Piece | State |
 |---|---|
 | Mouth adapter | **works**: 92.5% exact, 2.77 words/s |
 | Continuity injection | **works**: 90% answer present, 98.3% recall, median 0 ms join |
-| Hard switch | **works**: 11/12 answer present, median 0 ms join |
-| Joint duplex policy | **works**: 0/63 speak while user speaks, 60/63 on agent turn (greedy: 8/63) |
-| Remaining gap | audio-only agent speech loops or produces a fragment; needs a text plan in the agent slot |
-| Current work | re-voice 30–60 min of Open Yap, turn-boundary cache, retrain, re-check |
+| Vani voice | **works**: one TTS voice; samples under `data/probe/samples/vani_voice/` |
+| Pure-audio duplex | **not yet**: speech-only and listen-only adapters work separately; no single adapter has both |
+| EOS finding | the codec EOS is the model's silence shortcut; teacher forcing hides it |
+| Current work | speech-oversampled run, then the fair multi-window probe |
+| Next decision | scale only after overfit + held-out + scaling-curve + oracle diagnostics |
 
 Rules for this folder:
 
