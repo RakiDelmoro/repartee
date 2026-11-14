@@ -1,6 +1,7 @@
-"""Knowledge-base storage: sessions, events, entities.
+"""Knowledge base: one row per conversation, with its transcript, summary and audio size.
 
-M1 of docs/knowledge-base.md. No model involvement - this is schema and CRUD only.
+SQLite is the whole store: the dashboard, the search index and the spool worker all
+read the same table, so a conversation and its summary can never drift apart.
 """
 
 from __future__ import annotations
@@ -20,71 +21,55 @@ CREATE TABLE IF NOT EXISTS sessions (
     duration_s  REAL,
     language    TEXT,
     transcript  TEXT NOT NULL DEFAULT '',
+    summary     TEXT NOT NULL DEFAULT '',
+    audio_bytes INTEGER,
+    created_at  TEXT NOT NULL DEFAULT '',
     status      TEXT NOT NULL DEFAULT 'receiving'
 );
 
-CREATE TABLE IF NOT EXISTS events (
-    id          TEXT PRIMARY KEY,
-    session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    kind        TEXT NOT NULL CHECK (kind IN ('decision', 'action', 'question', 'topic')),
-    text        TEXT NOT NULL,
-    evidence    TEXT NOT NULL,
-    owner       TEXT,
-    due         TEXT,
-    t_start     REAL,
-    confidence  REAL,
-    created_at  TEXT NOT NULL
+CREATE INDEX IF NOT EXISTS sessions_started ON sessions(started_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+    transcript, content='sessions', content_rowid='rowid'
 );
 
-CREATE TABLE IF NOT EXISTS entities (
-    id          TEXT PRIMARY KEY,
-    kind        TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    aliases     TEXT
-);
+CREATE TRIGGER IF NOT EXISTS sessions_ai AFTER INSERT ON sessions BEGIN
+    INSERT INTO sessions_fts(rowid, transcript) VALUES (new.rowid, new.transcript);
+END;
 
-CREATE TABLE IF NOT EXISTS event_entities (
-    event_id    TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-    role        TEXT NOT NULL,
-    PRIMARY KEY (event_id, entity_id, role)
-);
+CREATE TRIGGER IF NOT EXISTS sessions_ad AFTER DELETE ON sessions BEGIN
+    INSERT INTO sessions_fts(sessions_fts, rowid, transcript)
+    VALUES ('delete', old.rowid, old.transcript);
+END;
 
-CREATE TABLE IF NOT EXISTS event_links (
-    from_event  TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    to_event    TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    relation    TEXT NOT NULL,
-    PRIMARY KEY (from_event, to_event, relation)
-);
-
-CREATE INDEX IF NOT EXISTS events_session ON events(session_id, kind);
-CREATE INDEX IF NOT EXISTS events_kind ON events(kind);
+CREATE TRIGGER IF NOT EXISTS sessions_au AFTER UPDATE ON sessions BEGIN
+    INSERT INTO sessions_fts(sessions_fts, rowid, transcript)
+    VALUES ('delete', old.rowid, old.transcript);
+    INSERT INTO sessions_fts(rowid, transcript) VALUES (new.rowid, new.transcript);
+END;
 """
+
+MIGRATIONS = (
+    ("sessions", "summary", "TEXT NOT NULL DEFAULT ''"),
+    ("sessions", "audio_bytes", "INTEGER"),
+    ("sessions", "created_at", "TEXT NOT NULL DEFAULT ''"),
+)
 
 
 @dataclass(frozen=True)
-class Session:
+class Conversation:
+    """One finished recording: what the worker writes and the API returns."""
+
     id: str
     device: str
     started_at: str | None
-    ended_at: str | None
     duration_s: float | None
     language: str | None
-    transcript: str = ""
-    status: str = "receiving"
-
-
-@dataclass(frozen=True)
-class Event:
-    id: str
-    session_id: str
-    kind: str
-    text: str
-    evidence: str
-    owner: str | None = None
-    due: str | None = None
-    t_start: float | None = None
-    confidence: float | None = None
+    transcript: str
+    audio_bytes: int | None = None
+    summary: str = ""
+    ended_at: str | None = None
+    status: str = "transcribed"
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -92,125 +77,94 @@ def connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 def init(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for table, column, decl in MIGRATIONS:
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
     conn.commit()
 
 
-def upsert_session(conn: sqlite3.Connection, session: Session) -> None:
+def upsert(conn: sqlite3.Connection, conv: Conversation) -> None:
     conn.execute(
-        """INSERT INTO sessions (id, device, started_at, ended_at, duration_s,
-                                 language, transcript, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """INSERT INTO sessions (id, device, started_at, ended_at, duration_s, language,
+                                 transcript, summary, audio_bytes, created_at, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                ended_at   = excluded.ended_at,
                duration_s = excluded.duration_s,
                language   = excluded.language,
                transcript = excluded.transcript,
+               summary    = excluded.summary,
+               audio_bytes= excluded.audio_bytes,
                status     = excluded.status""",
         (
-            session.id,
-            session.device,
-            session.started_at,
-            session.ended_at,
-            session.duration_s,
-            session.language,
-            session.transcript,
-            session.status,
+            conv.id, conv.device, conv.started_at, conv.ended_at, conv.duration_s,
+            conv.language, conv.transcript, conv.summary, conv.audio_bytes,
+            datetime.now(timezone.utc).isoformat(timespec="seconds"), conv.status,
         ),
     )
     conn.commit()
 
 
-def get_session(conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
+def get(conn: sqlite3.Connection, session_id: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
     return dict(row) if row else None
 
 
-def insert_event(conn: sqlite3.Connection, event: Event) -> bool:
-    """Insert an event. Returns False when the id already exists."""
-    try:
-        conn.execute(
-            """INSERT INTO events (id, session_id, kind, text, evidence,
-                                   owner, due, t_start, confidence, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                event.id,
-                event.session_id,
-                event.kind,
-                event.text,
-                event.evidence,
-                event.owner,
-                event.due,
-                event.t_start,
-                event.confidence,
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            ),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        conn.rollback()
-        return False
-
-
-def list_events(
-    conn: sqlite3.Connection, session_id: str | None = None, kind: str | None = None, limit: int = 200
-) -> list[dict[str, Any]]:
-    clauses, params = [], []
-    if session_id:
-        clauses.append("session_id = ?")
-        params.append(session_id)
-    if kind:
-        clauses.append("kind = ?")
-        params.append(kind)
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+def recent(conn: sqlite3.Connection, limit: int = 20) -> list[dict[str, Any]]:
     rows = conn.execute(
-        f"""SELECT id, session_id, kind, text, evidence, owner, due, t_start, confidence
-            FROM events {where}
-            ORDER BY t_start IS NULL, t_start, id
-            LIMIT ?""",
-        (*params, limit),
+        """SELECT id, device, started_at, duration_s, language, summary, audio_bytes,
+                  status, COALESCE(substr(started_at, 1, 10), '') AS day
+           FROM sessions ORDER BY started_at DESC, id DESC LIMIT ?""",
+        (limit,),
     ).fetchall()
     return [dict(row) for row in rows]
 
 
-def upsert_entity(conn: sqlite3.Connection, entity_id: str, kind: str, name: str, aliases: list[str] | None = None) -> None:
-    import json
-
-    conn.execute(
-        """INSERT INTO entities (id, kind, name, aliases) VALUES (?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name,
-                                         aliases = excluded.aliases""",
-        (entity_id, kind, name, json.dumps(aliases or [])),
-    )
-    conn.commit()
-
-
-def link_event_entity(conn: sqlite3.Connection, event_id: str, entity_id: str, role: str) -> None:
-    conn.execute(
-        """INSERT OR IGNORE INTO event_entities (event_id, entity_id, role)
-           VALUES (?, ?, ?)""",
-        (event_id, entity_id, role),
-    )
-    conn.commit()
+def search(conn: sqlite3.Connection, query: str, limit: int = 20) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """SELECT s.id, s.device, s.started_at, s.summary, s.transcript,
+                  snippet(sessions_fts, 0, '[', ']', '…', 12) AS snippet
+           FROM sessions_fts
+           JOIN sessions s ON s.rowid = sessions_fts.rowid
+           WHERE sessions_fts MATCH ?
+           ORDER BY rank LIMIT ?""",
+        (query, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
-def link_events(conn: sqlite3.Connection, from_event: str, to_event: str, relation: str) -> None:
-    conn.execute(
-        """INSERT OR IGNORE INTO event_links (from_event, to_event, relation)
-           VALUES (?, ?, ?)""",
-        (from_event, to_event, relation),
-    )
-    conn.commit()
+def list_days(conn: sqlite3.Connection, limit: int = 60) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """SELECT substr(started_at, 1, 10) AS day, COUNT(*) AS sessions,
+                  SUM(duration_s) AS seconds
+           FROM sessions
+           WHERE started_at IS NOT NULL AND started_at != ''
+           GROUP BY day ORDER BY day DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    return [
+        {"day": row["day"], "sessions": int(row["sessions"]),
+         "seconds": round(float(row["seconds"] or 0.0), 1)}
+        for row in rows
+    ]
 
 
-def counts(conn: sqlite3.Connection) -> dict[str, int]:
-    return {
-        table: int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
-        for table in ("sessions", "events", "entities")
-    }
+def sessions_for_day(conn: sqlite3.Connection, day: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """SELECT id, device, started_at, duration_s, language, summary, audio_bytes, status
+           FROM sessions
+           WHERE substr(started_at, 1, 10) = ?
+           ORDER BY started_at, id""",
+        (day,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def count(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0])

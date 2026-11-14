@@ -1,4 +1,4 @@
-"""Speech recognition with Qwen3-ASR."""
+"""Speech recognition: LFM3-Audio-2B (runtime) or Qwen3-ASR (reference)."""
 
 from __future__ import annotations
 
@@ -76,3 +76,18 @@ class QwenTranscriber:
             language=parsed.get("language"),
             duration_s=float(info.duration),
         )
+
+
+def make_transcriber():
+    """Runtime transcriber: LFM3-Audio-2B by default, Qwen3-ASR on request.
+
+    The LFM3 object also carries `summarize`; Qwen only transcribes, so a Qwen run
+    stores transcripts without a summary.
+    """
+    if config.ASR_ENGINE == "qwen":
+        return QwenTranscriber()
+    if config.ASR_ENGINE == "lfm3":
+        from .lfm3 import Lfm3
+
+        return Lfm3()
+    raise ValueError(f"unknown ASR engine: {config.ASR_ENGINE!r}")

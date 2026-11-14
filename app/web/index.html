@@ -3,34 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Repartee — project knowledge</title>
+<title>Repartee — conversations by day</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <aside id="sidebar">
     <header>
-      <h1>Project knowledge</h1>
+      <h1>Conversations</h1>
       <div id="stats" class="muted">loading…</div>
     </header>
 
-    <section>
-      <h2>Filter</h2>
-      <div id="filters" class="filters"></div>
-    </section>
+    <input id="search" type="search" placeholder="search transcripts…" autocomplete="off">
 
     <section>
-      <h2>Sessions</h2>
-      <ul id="sessions" class="sessions"></ul>
+      <h2>Days</h2>
+      <ul id="days" class="days"></ul>
     </section>
 
-    <footer class="muted">
-      drag to pan · wheel to zoom · click a node
-    </footer>
+    <footer class="muted">one row per recording · transcript + summary</footer>
   </aside>
 
   <main id="stage">
-    <canvas id="graph"></canvas>
-    <div id="empty" class="empty hidden">No events yet.</div>
+    <header id="stage-head">
+      <h2 id="day-title">Select a day</h2>
+      <div id="day-meta" class="muted"></div>
+    </header>
+    <div id="cards" class="cards"></div>
+    <div id="empty" class="empty">No conversations yet.</div>
   </main>
 
   <aside id="detail" class="hidden">
@@ -38,6 +37,6 @@
     <div id="detail-body"></div>
   </aside>
 
-  <script src="/static/graph.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

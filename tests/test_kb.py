@@ -1,5 +1,7 @@
-import sqlite3
-import tempfile
+"""Knowledge base: one row per conversation, day grouping, FTS search."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -8,85 +10,68 @@ from app import kb
 
 
 @pytest.fixture()
-def conn():
-    tmp = tempfile.TemporaryDirectory()
-    connection = kb.connect(Path(tmp.name) / "kb.db")
-    kb.init(connection)
-    yield connection
-    connection.close()
-    tmp.cleanup()
+def conn(tmp_path: Path):
+    c = kb.connect(tmp_path / "kb.db")
+    kb.init(c)
+    yield c
+    c.close()
 
 
-def test_store_and_read_back_a_hand_written_event(conn):
-    kb.upsert_session(
-        conn,
-        kb.Session(id="rep01-20261107-143012", device="rep01", started_at="2026-11-07T14:30:12",
-                   ended_at="2026-11-07T15:12:00", duration_s=2510.0, language="English",
-                   transcript="...", status="ready"),
-    )
-    assert kb.insert_event(
-        conn,
-        kb.Event(
-            id="rep01-20261107-143012-1",
-            session_id="rep01-20261107-143012",
-            kind="decision",
-            text="delay the launch to Q2",
-            evidence="we will delay the launch to Q2",
-            t_start=412.5,
-            confidence=0.9,
-        ),
+def conversation(session_id: str = "20261113-090000-room1.wav",
+                 started_at: str | None = "2026-11-13T09:00:00",
+                 summary: str = "Launch moved to Q2.",
+                 transcript: str = "We moved the launch to Q2. Tom documents it."):
+    return kb.Conversation(
+        id=session_id, device="room1", started_at=started_at, duration_s=12.0,
+        language=None, transcript=transcript, audio_bytes=2048, summary=summary,
     )
 
-    session = kb.get_session(conn, "rep01-20261107-143012")
-    assert session["status"] == "ready"
-    assert session["duration_s"] == 2510.0
 
-    events = kb.list_events(conn, "rep01-20261107-143012")
-    assert len(events) == 1
-    assert events[0]["kind"] == "decision"
-    assert events[0]["evidence"] == "we will delay the launch to Q2"
-    assert kb.counts(conn) == {"sessions": 1, "events": 1, "entities": 0}
-
-
-def test_event_without_a_session_is_rejected(conn):
-    with pytest.raises(sqlite3.IntegrityError):
-        conn.execute(
-            """INSERT INTO events (id, session_id, kind, text, evidence, created_at)
-               VALUES ('x', 'missing', 'decision', 't', 'e', 'now')"""
-        )
+def test_a_conversation_is_one_row_with_its_summary(conn):
+    conv = conversation()
+    kb.upsert(conn, conv)
+    row = kb.get(conn, conv.id)
+    assert row["transcript"] == conv.transcript
+    assert row["summary"] == conv.summary
+    assert row["audio_bytes"] == 2048
+    assert row["status"] == "transcribed"
+    assert kb.count(conn) == 1
 
 
-def test_unknown_kind_is_rejected(conn):
-    kb.upsert_session(conn, kb.Session("s", "rep01", None, None, None, None))
-    with pytest.raises(sqlite3.IntegrityError):
-        conn.execute(
-            """INSERT INTO events (id, session_id, kind, text, evidence, created_at)
-               VALUES ('x', 's', 'nonsense', 't', 'e', 'now')"""
-        )
+def test_upsert_replaces_rather_than_duplicates(conn):
+    kb.upsert(conn, conversation(summary=""))
+    kb.upsert(conn, conversation(summary="Launch moved to Q2."))
+    assert kb.count(conn) == 1
+    assert kb.get(conn, conversation().id)["summary"] == "Launch moved to Q2."
 
 
-def test_duplicate_event_id_is_ignored(conn):
-    kb.upsert_session(conn, kb.Session("s", "rep01", None, None, None, None))
-    event = kb.Event("e1", "s", "topic", "pricing", "we talked about pricing")
-    assert kb.insert_event(conn, event) is True
-    assert kb.insert_event(conn, event) is False
-    assert len(kb.list_events(conn, "s")) == 1
+def test_days_group_conversations_and_carry_totals(conn):
+    kb.upsert(conn, conversation("20261112-090000-room1.wav", "2026-11-12T09:00:00"))
+    kb.upsert(conn, conversation("20261112-150000-room1.wav", "2026-11-12T15:00:00"))
+    kb.upsert(conn, conversation("20261113-080000-room2.wav", "2026-11-13T08:00:00",
+                                 summary="Hosting decision."))
+
+    days = kb.list_days(conn)
+    assert [d["day"] for d in days] == ["2026-11-13", "2026-11-12"]
+    assert days[1]["sessions"] == 2
+    assert days[1]["seconds"] == 24.0
+
+    today = kb.sessions_for_day(conn, "2026-11-12")
+    assert [s["id"] for s in today] == ["20261112-090000-room1.wav",
+                                        "20261112-150000-room1.wav"]
+    assert today[0]["summary"] == "Launch moved to Q2."
 
 
-def test_events_are_ordered_by_time(conn):
-    kb.upsert_session(conn, kb.Session("s", "rep01", None, None, None, None))
-    kb.insert_event(conn, kb.Event("b", "s", "topic", "second", "e2", t_start=20.0))
-    kb.insert_event(conn, kb.Event("a", "s", "topic", "first", "e1", t_start=10.0))
-    kb.insert_event(conn, kb.Event("c", "s", "topic", "no time", "e3"))
+def test_search_finds_the_transcript_and_returns_the_summary(conn):
+    kb.upsert(conn, conversation())
+    hits = kb.search(conn, "launch")
+    assert len(hits) == 1
+    assert hits[0]["summary"] == "Launch moved to Q2."
+    assert "launch" in hits[0]["snippet"].lower()
+    assert kb.search(conn, "nonexistentword") == []
 
-    assert [e["id"] for e in kb.list_events(conn, "s")] == ["a", "b", "c"]
 
-
-def test_entity_link_round_trip(conn):
-    kb.upsert_session(conn, kb.Session("s", "rep01", None, None, None, None))
-    kb.insert_event(conn, kb.Event("e1", "s", "action", "send the spec", "Raki will send the spec"))
-    kb.upsert_entity(conn, "person:raki", "person", "Raki", ["Raki Delmoro"])
-    kb.link_event_entity(conn, "e1", "person:raki", "owner")
-
-    rows = conn.execute("SELECT role FROM event_entities WHERE event_id = 'e1'").fetchall()
-    assert [r["role"] for r in rows] == ["owner"]
+def test_a_conversation_without_a_start_time_is_not_a_day(conn):
+    kb.upsert(conn, conversation("mystery.wav", started_at=None))
+    assert kb.list_days(conn) == []
+    assert kb.recent(conn)[0]["day"] == ""

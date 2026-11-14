@@ -7,13 +7,39 @@ All numbers **measured** on a Quadro RTX 4000 (8 GB), fp16, unless marked planne
 | Model | Params | Weights | License | Note |
 |---|---|---|---|---|
 | Qwen3-ASR-1.7B-hf | 1.72 B | 3.44 GB | Apache-2.0 | most accurate on rare terms |
-| Qwen3-ASR-0.6B-hf | 782 M | 1.56 GB | Apache-2.0 | **current default**; same API |
+| Qwen3-ASR-0.6B-hf | 782 M | 1.56 GB | Apache-2.0 | reference accuracy; `REPARTEE_ASR_ENGINE=qwen` |
+| LFM3-Audio-2B | 2.17 B | 4.3 GB | — | **runtime default**, one family with the device model |
 | Granite Speech 5.0 470M | 473 M | 0.95 GB | Apache-2.0 | best meeting WER per MB, different API, 2-min cap |
 | Parakeet TDT 0.6B v3 | 600 M | ~1.2 GB | CC-BY-4.0 | attribution required |
 | Whisper large-v3-turbo | 809 M | ~1.6 GB | Apache-2.0 | worst meeting accuracy of the group |
 
 Both Qwen models use `AutoProcessor` + `AutoModelForMultimodalLM` and the same
 `apply_transcription_request` call, so switching is `REPARTEE_ASR_MODEL=<path>`.
+
+## Measured: LFM3-Audio-2B as the transcriber
+
+`app/asr.py: Lfm3Transcriber` sends the clip as one audio turn with a
+"transcribe verbatim" system prompt and generates with `generation_mode="text"`.
+
+| Audio | Wall time (incl. load) | Output |
+|---|---|---|
+| 10 s interview clip | 155 s, of which ~140 s is model load | 216 characters |
+| 90 s interview clip | generation finished inside 190 s total | run failed later at decode, since fixed |
+
+Quality, same clip: LFM3 writes *"playing around with the fortram … brilliant
+trees … organ sound"* where the Qwen reference hears the music terms correctly
+("four track"). Qwen measured ~3 word errors per 90 s; expect visibly more from
+LFM3 on rare terms, at ~3x the VRAM (4.3 GB vs 1.58 GB for 0.6B).
+
+Consequences:
+
+1. Keep clips at 60 s: the 2B forward pass is the cost driver, and the listener's
+   60 s silence rule already bounds them.
+2. Treat LFM3 output as a draft: the knowledge-base extractor requires every event
+   to quote the transcript, so a garbled term becomes a missing event rather than a
+   wrong one.
+3. Switch with `REPARTEE_ASR_ENGINE=qwen` when accuracy on names/terms matters more
+   than staying in one model family.
 
 ## Measured: 1.7B vs 0.6B
 

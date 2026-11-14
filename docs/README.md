@@ -1,10 +1,15 @@
 # Docs
 
-Design notes for the room-recorder project. Written while the hardware is still
-in transit, so the device sections are **planned**, not built.
+Design notes for the room-recorder project. The device hardware has not arrived,
+but the listener software and the whole server pipeline are built and tested; see
+[goal.md](goal.md) for what is real and what is planned.
 
 | Document | Covers |
 |---|---|
+| [goal.md](goal.md) | **the centre**: stage-1 requirements, what exists, vNext and vNextNext constraints |
+| [model-research.md](model-research.md) | duplex models, text-injection capability, feasibility on 8 GB, research programme R1–R5 |
+| [seam-results.md](seam-results.md) | first seam measurement: gap, recall, pitch step, and what it implies |
+| [actor-plan.md](actor-plan.md) | stage-3 design: duplex actor in front, big model reasoning behind, state machine, experiments, gates |
 | [architecture.md](architecture.md) | system overview, data contracts, server pipeline, knowledge-base stage |
 | [knowledge-base.md](knowledge-base.md) | event schema, extraction contract, model sizing, milestones |
 | [device.md](device.md) | room-mic hardware, firmware plan, segmentation rule, buffering |
@@ -14,19 +19,22 @@ in transit, so the device sections are **planned**, not built.
 
 A microphone array in a room records conversations when people are speaking and
 streams them to a server. The server transcribes the audio, stores the transcript,
-and a ~9B language model turns it into an event knowledge base: decisions, action
-items, owners, topics. The room device does no transcription; the server does no
+and the same LFM3-Audio-2B that transcribes also writes a short summary and topic
+list that go into the knowledge base. The room device does no transcription; the server does no
 recording.
 
 ## Status
 
 | Piece | State |
 |---|---|
-| Server: ingest API, spool worker, ASR, transcript store | **built and tested** |
-| ASR model selection (1.7B vs 0.6B) | **measured**; 0.6B is the default |
+| Server: ingest API, spool worker, ASR, summary, one-row store | **built and tested** |
+| Dashboard: conversations grouped by day, summary + transcript | **built**; API verified, UI not yet exercised in a browser here |
+| Device-side listener (energy VAD, 60 s silence close, spool handoff) | **built and tested** (`app/listener.py`) |
+| Runtime STT | **LFM3-Audio-2B** (one family with the device model); Qwen3-ASR stays selectable with `REPARTEE_ASR_ENGINE=qwen` |
 | Session grouping for 60 s chunks | not built |
-| Knowledge-base extraction (9B) | not built |
-| Device firmware | not started (hardware not delivered) |
+| Summary + topics per conversation (LFM3) | **built and tested**; stored on the session row |
+| Structured events (decisions/actions/owners) | future: needs a bigger model, measured in `knowledge-base.md` |
+| Device firmware | not started (hardware not delivered); the host listener is the reference behaviour |
 
 ## Conventions
 

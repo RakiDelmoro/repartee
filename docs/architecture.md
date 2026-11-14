@@ -11,18 +11,25 @@ what was discussed, what was decided, who owns the follow-up.
 flowchart LR
   subgraph Room
     M[reSpeaker XVF3800<br/>4-mic array + DSP] -->|I2S + I2C| E[XIAO ESP32-S3]
+    E --> R[listener<br/>energy VAD, 30 ms frames]
+    R -->|speech starts: record<br/>silence 60 s: close| E
     E -->|Opus frames over Wi-Fi| S
   end
   subgraph Server
     S[ingest API] --> W[worker]
-    W --> A[Qwen3-ASR]
+    W --> A[LFM3-Audio-2B<br/>STT]
     A --> D[(transcripts<br/>SQLite + FTS5)]
-    D --> L[9B extractor]
-    L --> K[(events, decisions,<br/>actions)]
+    A --> L[summary + topics<br/>same LFM3 model]
+    L --> K[(sessions with<br/>summary + topics)]
   end
 ```
 
-The device records and ships audio. The server transcribes, then extracts.
+The device listens, records, and ships audio. The server transcribes with
+LFM3-Audio-2B and writes the summary with the same loaded model. The structured
+event contract further down is **future work**: it needs a larger language model,
+because the 2B failed it in measurement (`knowledge-base.md`). The listener is implemented
+in `app/listener.py` and runs on the host as well as on the device; the firmware
+portion is still planned (see device.md).
 
 ## Contracts
 
@@ -59,32 +66,34 @@ data/repartee.db SQLite, conversations table + FTS5 index
 ```
 
 `app/server.py` exposes `POST /ingest`, `GET /health`, `GET /conversations`,
-`GET /conversations/{id}`, `GET /search`. `app/pipeline.py` claims files, runs ASR,
-stores the transcript, and moves the file.
+`GET /conversations/{id}`, `GET /search`, `GET /api/days`, `GET /api/sessions`,
+`GET /api/sessions/{id}`, `GET /api/stats`. `app/pipeline.py` claims files, runs ASR,
+writes the transcript and summary as one row, and moves the file.
 
 ## Web UI
 
-`GET /` serves a graph view of the knowledge base, bound to `0.0.0.0` so anyone on
-the LAN can open `http://<host>:8080/`.
+`GET /` serves a dashboard bound to `0.0.0.0` so anyone on the LAN can open
+`http://<host>:8080/`.
 
-- `GET /api/graph` - nodes (sessions, events, entities) and edges
-- `GET /api/events/{id}` - full event including the evidence quote
-- `GET /api/sessions` - session list with event counts
-- `GET /api/stats` - row counts
+- `GET /api/days` - calendar days with conversation count and total audio seconds
+- `GET /api/sessions?day=YYYY-MM-DD` - that day's conversations, or the latest 200
+- `GET /api/sessions/{id}` - one conversation: transcript, summary, metadata
+- `GET /api/stats` - session and day counts
 
-The front end is `app/web/` (HTML, CSS, one dependency-free JS file): force-directed
-canvas graph, type filters, session filter, click-through to evidence. There is no
-authentication on the UI - it is a read-only LAN surface for now.
+The front end is `app/web/` (HTML, CSS, one dependency-free JS file): sidebar of
+days, conversation cards for the selected day, detail panel with the summary and
+the transcript, and a transcript search box. A session is deep-linkable with
+`/#s=<session id>`. There is no authentication on the UI -
+it is a read-only LAN surface for now.
 
-The graph is three levels: **day -> session -> event**. The day is derived from the
-session's start timestamp (the first ten characters, `YYYY-MM-DD`), so every
-conversation is filed under the calendar day it started, and each day is a separate
-subgraph. The timestamp itself comes from the upload filename:
+Grouping is by calendar day: the first ten characters of the session's start
+timestamp (`YYYY-MM-DD`), so every conversation is filed under the day it started.
+The timestamp itself comes from the upload filename:
 
 ```
-rep01-20261107-143012-s003.opus
-      └──┬───┘└──┬──┘
-        date   time
+20261107-143012-room1.opus
+└──┬───┘ └──┬─┘ └─┬─┘
+  date    time  device
 ```
 
 Clock source matters: the device stamps the filename from its own clock, so it must

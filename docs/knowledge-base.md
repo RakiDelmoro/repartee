@@ -1,5 +1,12 @@
 # Knowledge base (planned)
 
+> **Stage 1 status:** the knowledge base stores a prose summary and a topic list per
+> conversation, written by the same LFM3-Audio-2B that transcribes. The structured
+> event contract below is **future work**: measured on the three fixtures, the 2B
+> produced valid JSON but fabricated actions on the no-outcome meeting, over-extracted
+> on the others, and attributed 1 owner where 3 were named. The 9B numbers here are
+> the reference for when a larger model is available.
+
 The 9B stage: turn a transcript into structured events that can be queried,
 linked and reasoned over later.
 
@@ -102,7 +109,8 @@ Prompt rules:
 Decoding: grammar-constrained JSON (llama.cpp `json_schema` / GBNF) so malformed
 output is impossible. Temperature 0.
 
-Validation after generation, as implemented in `app/extract.py`:
+Validation after generation (implemented while the 9B stage existed, then removed with
+it; re-implement it with the model):
 
 1. parse JSON (tolerating a markdown fence or leading prose)
 2. `evidence` must exist in the chunk: exact match, or 90 % of its words in order

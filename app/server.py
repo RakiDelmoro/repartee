@@ -1,4 +1,4 @@
-"""Ingest API and knowledge-base queries."""
+"""Ingest API and knowledge-base queries (one table: sessions)."""
 
 from __future__ import annotations
 
@@ -13,9 +13,8 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db
-from . import kb as knowledge
-from .asr import QwenTranscriber
+from . import config, kb
+from .asr import make_transcriber
 from .pipeline import Worker
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -55,7 +54,7 @@ def already_known(conn, name: str) -> bool:
         (config.DONE_DIR / name).exists()
         or (config.WORKING_DIR / name).exists()
         or (config.SPOOL_DIR / name).exists()
-        or db.get(conn, name) is not None
+        or kb.get(conn, name) is not None
     )
 
 
@@ -69,9 +68,9 @@ async def lifespan(app: FastAPI):
     for partial in config.SPOOL_DIR.glob("*.part"):
         partial.unlink(missing_ok=True)
 
-    conn = db.connect(config.DB_PATH)
-    db.init(conn)
-    worker = Worker(QwenTranscriber())
+    conn = kb.connect(config.DB_PATH)
+    kb.init(conn)
+    worker = Worker(make_transcriber())
     worker.start()
     app.state.conn = conn
     app.state.worker = worker
@@ -97,7 +96,8 @@ def index() -> FileResponse:
 def health() -> dict:
     return {
         "ok": True,
-        "conversations": db.count(app.state.conn),
+        "conversations": kb.count(app.state.conn),
+        "days": len(kb.list_days(app.state.conn)),
         "spooled": len([p for p in config.SPOOL_DIR.glob("*") if not p.name.endswith(".part")]),
     }
 
@@ -140,12 +140,12 @@ async def ingest(
 
 @app.get("/conversations")
 def conversations(limit: int = Query(20, ge=1, le=200)) -> dict:
-    return {"items": db.recent(app.state.conn, limit)}
+    return {"items": kb.recent(app.state.conn, limit)}
 
 
 @app.get("/conversations/{conversation_id}")
 def conversation(conversation_id: str) -> dict:
-    row = db.get(app.state.conn, conversation_id)
+    row = kb.get(app.state.conn, conversation_id)
     if row is None:
         raise HTTPException(404, "not found")
     return row
@@ -154,7 +154,7 @@ def conversation(conversation_id: str) -> dict:
 @app.get("/search")
 def search(q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=200)) -> dict:
     try:
-        return {"items": db.search(app.state.conn, q, limit)}
+        return {"items": kb.search(app.state.conn, q, limit)}
     except sqlite3.OperationalError as exc:
         raise HTTPException(400, f"bad query: {exc}") from exc
 
@@ -162,93 +162,27 @@ def search(q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=20
 # --- knowledge base -------------------------------------------------------
 
 
-@app.get("/api/graph")
-def graph(limit: int = Query(800, ge=1, le=5000)) -> dict:
-    """Nodes and edges for the graph view: sessions, events, entities."""
-    conn = app.state.conn
-    nodes: list[dict] = []
-    links: list[dict] = []
-
-    sessions = conn.execute(
-        "SELECT id, device, started_at, status FROM sessions ORDER BY started_at DESC"
-    ).fetchall()
-
-    days: dict[str, dict] = {}
-    for session in sessions:
-        day = (session["started_at"] or "")[:10] or "unknown"
-        if day not in days:
-            days[day] = {"id": f"day-{day}", "label": day, "type": "day", "session": None}
-            nodes.append(days[day])
-        nodes.append(
-            {
-                "id": session["id"],
-                "label": f"{session['device']} · {(session['started_at'] or '')[11:16]}",
-                "type": "session",
-                "session": session["id"],
-                "day": day,
-            }
-        )
-        links.append({"source": days[day]["id"], "target": session["id"], "type": "day"})
-
-    rows = conn.execute(
-        """SELECT id, session_id, kind, text, owner FROM events
-           ORDER BY session_id, t_start IS NULL, t_start
-           LIMIT ?""",
-        (limit,),
-    ).fetchall()
-
-    day_of = {s["id"]: (s["started_at"] or "")[:10] or "unknown" for s in sessions}
-
-    for event in rows:
-        nodes.append(
-            {
-                "id": event["id"],
-                "label": event["text"][:90],
-                "type": event["kind"],
-                "session": event["session_id"],
-                "day": day_of.get(event["session_id"]),
-            }
-        )
-        links.append(
-            {"source": event["session_id"], "target": event["id"], "type": "contains"}
-        )
-
-    for entity in conn.execute("SELECT id, kind, name FROM entities").fetchall():
-        nodes.append(
-            {"id": entity["id"], "label": entity["name"], "type": entity["kind"], "session": None}
-        )
-
-    for row in conn.execute("SELECT event_id, entity_id, role FROM event_entities").fetchall():
-        links.append({"source": row["event_id"], "target": row["entity_id"], "type": row["role"]})
-
-    for row in conn.execute("SELECT from_event, to_event, relation FROM event_links").fetchall():
-        links.append(
-            {"source": row["from_event"], "target": row["to_event"], "type": row["relation"]}
-        )
-
-    return {"nodes": nodes, "links": links}
-
-
-@app.get("/api/events/{event_id}")
-def event_detail(event_id: str) -> dict:
-    row = app.state.conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
-    if row is None:
-        raise HTTPException(404, "not found")
-    return dict(row)
+@app.get("/api/days")
+def api_days(limit: int = Query(60, ge=1, le=365)) -> dict:
+    return {"items": kb.list_days(app.state.conn, limit)}
 
 
 @app.get("/api/sessions")
-def api_sessions() -> dict:
-    rows = app.state.conn.execute(
-        """SELECT s.id, s.device, s.started_at, s.status,
-                  substr(s.started_at, 1, 10) AS day,
-                  COUNT(e.id) AS events
-           FROM sessions s LEFT JOIN events e ON e.session_id = s.id
-           GROUP BY s.id ORDER BY s.started_at DESC"""
-    ).fetchall()
-    return {"items": [dict(row) for row in rows]}
+def api_sessions(day: str | None = Query(None, min_length=10, max_length=10)) -> dict:
+    items = (kb.sessions_for_day(app.state.conn, day) if day
+             else kb.recent(app.state.conn, 200))
+    return {"items": items, "day": day}
+
+
+@app.get("/api/sessions/{session_id}")
+def api_session(session_id: str) -> dict:
+    row = kb.get(app.state.conn, session_id)
+    if row is None:
+        raise HTTPException(404, "not found")
+    return row
 
 
 @app.get("/api/stats")
 def api_stats() -> dict:
-    return knowledge.counts(app.state.conn)
+    return {"sessions": kb.count(app.state.conn),
+            "days": len(kb.list_days(app.state.conn))}

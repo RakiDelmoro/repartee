@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+speaker_a.flac
+*.mp4

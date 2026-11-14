@@ -1,7 +1,8 @@
-# Room device (planned)
+# Room device (software listener built, firmware planned)
 
-Hardware has not arrived yet. Everything here is a design decision, not a
-verified implementation.
+Hardware has not arrived yet, but the segmentation decision now has a working
+reference implementation on the host: `app/listener.py` (see below). The firmware
+section is still a plan.
 
 ## Hardware
 
@@ -46,6 +47,33 @@ means neither side of the seam is a fragment.
 
 Speech energy comes from the XVF3800 over I2C, so no extra VAD model is needed on
 the device.
+
+## Implemented reference listener (host)
+
+`app/listener.py` is the software form of the device rule: pure-energy VAD on
+30 ms frames, no model, no audio-device library. It reads 16 kHz mono s16le PCM
+from any command (`arecord`, `parecord`, `ffmpeg`; `REPARTEE_LISTENER_CMD`) and
+writes finished recordings atomically to the spool with the device filename
+`YYYYMMDD-HHMMSS-device.wav`. Two recordings in the same second cannot collide:
+the stamp is forced monotonic, because the ingest regex accepts exactly six time
+digits.
+
+```
+.venv/bin/python -m app listen --device room1 --stop-silence 60 --preroll 1.0
+.venv/bin/python -m app listen --input samples/two-speakers-interview-clean.wav \
+    --spool /tmp/spool --stop-silence 0.8 --device room1      # replay a file
+```
+
+| knob | default | effect |
+|---|---|---|
+| `--threshold` | 0.012 RMS | frame counts as speech above max(threshold, 3x noise floor) |
+| `--min-speech-ms` | 90 | speech this long starts a recording |
+| `--stop-silence` | 60 s | silence this long closes it (the requirement's "1 minute") |
+| `--preroll` | 1.0 s | audio kept before the first speech frame, so the first word is not clipped |
+| `--max-record` | 1800 s | hard cap so a stuck stream cannot fill the disk |
+
+Segments shorter than 1 s are discarded as noise. Tests cover the state machine,
+the noise-floor behaviour, and the spool filename contract (`tests/test_listener.py`).
 
 ## Transport: stream frames, segment on the server
 
