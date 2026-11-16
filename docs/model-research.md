@@ -7,7 +7,7 @@ would it take?
 Sources are linked inline. Numbers are from the model/serving documentation as of
 2026-11-14; measured-on-this-box numbers are marked.
 
-## The four families
+## The families
 
 | family | example | duplex | unit | text into the live stream | cancel / truncate | size |
 |---|---|---|---|---|---|---|
@@ -16,6 +16,7 @@ Sources are linked inline. Numbers are from the model/serving documentation as o
 | **C. turn-based omni** | Qwen3-Omni-30B-A3B | no: VAD ends the turn, speech during a reply interrupts it | turn | text is the answer channel (turn based) | yes | 30B MoE, 2×H100 / 1×H200 |
 | **D. streaming cascade** | ASR + LLM + TTS (SGLang cascade, Unmute-style) | listening + filler by the server; answer synthesised | streamed chunks | text is TTS input, i.e. **always injectable** | yes, via forced alignment to the last heard word | 1.7B ASR + 4–27B LLM + 0.6–1.7B TTS |
 | **(E) our LFM3-Audio-2B** | interleaved ChatML speech blocks | rules + heads (measured) | 80 ms | forced text after `text_end` is in-distribution and measured verbatim | yes (160 ms cut, measured) | 2.17B, 4.3 GB fp16 |
+| **F. native tri-stream duplex** | Haru-4B (Qwen3.5-4B, 7.5 Hz) | yes: listens and speaks every 133 ms | 133 ms | the text stream is a **per-frame input** to the LM, so a token can be forced at any frame (not an API; sampler override) | no utterance truncate; forcing text is the cut | 4B, 10.5 GB bf16 checkpoint, ~12 GB GPU |
 
 Two findings that matter most:
 
@@ -33,6 +34,34 @@ There is also a research line for exactly this problem: **TurnGuide** (Interspee
 interleaves text and speech *at turn level* in full-duplex SLMs, explicitly to keep
 acoustic flow while gaining LLM-level semantics. That is the training recipe for making
 mid-conversation text injection in-distribution, as opposed to an inference-time hack.
+
+### Haru-4B: the text stream is already an input
+
+Haru-4B (released 2026-11-13, Apache-2.0, code and weights public) removes the
+architectural objection to injection. Its LM consumes, at every 133 ms frame, the sum
+of the *previous* frame's text token, its own audio latent, and the user's audio latent.
+Text is therefore already an input channel: injection is a sampler override on one
+token per frame, not a new input modality. The served `DuplexSession` samples that token
+and exposes no text input, so this needs a harness, not a retrained model.
+
+Three consequences:
+
+- **Injection is frame-granular**, like PersonaPlex/Moshi, but at 7.5 Hz instead of 12.5 Hz.
+  No turn boundary, no `text_end`, no re-prefill: the same cache continues, so the
+  LFM3 failure mode (one utterance per turn) does not exist here.
+- **There is no EOS per turn.** The model returns to PAD frames to stop speaking; EOS is
+  banned from sampling, so there is no stop token to suppress and no utterance-level
+  truncate endpoint. Forcing text is the interruption: from the next frame the audio
+  follows the new words.
+- **Speech initiation is marked by EOP in the text stream** (the frame before speaking).
+  When the model is silent, an injected sentence should start with EOP; mid-utterance it
+  must not.
+
+Harness and design: `research/haru_inject.py` and [haru-injection.md](haru-injection.md);
+the schedule lives in `app/inject.py`. The injected text controls the words; the model
+keeps voice, prosody and listening, and can be held to a script (`scripted=True`) so it
+never free-samples. Cost: the 4B needs ~12 GB of GPU memory, so it was not run on this
+8 GB box; the blog's 65 ms is Apple Silicon, 15 ms/step is a B300.
 
 ## What "smooth handover" costs per family
 

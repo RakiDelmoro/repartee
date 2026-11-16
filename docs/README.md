@@ -8,6 +8,8 @@ but the listener software and the whole server pipeline are built and tested; se
 |---|---|
 | [goal.md](goal.md) | **the centre**: stage-1 requirements, what exists, vNext and vNextNext constraints |
 | [model-research.md](model-research.md) | duplex models, text-injection capability, feasibility on 8 GB, research programme R1–R5 |
+| [haru-injection.md](haru-injection.md) | Haru-4B: full duplex internals, forcing its text stream, the frame schedule, implied API |
+| [haru-quantization.md](haru-quantization.md) | 4-bit LM / fp16 audio on 8 GB: loader order, memory split, gates, risks |
 | [seam-results.md](seam-results.md) | first seam measurement: gap, recall, pitch step, and what it implies |
 | [actor-plan.md](actor-plan.md) | stage-3 design: duplex actor in front, big model reasoning behind, state machine, experiments, gates |
 | [architecture.md](architecture.md) | system overview, data contracts, server pipeline, knowledge-base stage |

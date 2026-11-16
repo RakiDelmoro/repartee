@@ -73,6 +73,9 @@ Design constraints this puts on stage 1, cheap to respect now:
 - realtime responses from a medium-power device (Jetson class);
 - space-filling speech so the conversation feels fluid while the bigger model thinks;
 - smooth handover between the small speech-to-speech model and the big model answer;
+  a released model now targets this directly: Haru-4B is native duplex at 133 ms and
+  takes text on its per-frame text stream, so the answer is injected, not handed over
+  between turns (`haru-injection.md`);
 - most conversational work on the medium device; the big model is invoked only when
   the small model judges the task hard;
 - good emotional awareness and empathy.
