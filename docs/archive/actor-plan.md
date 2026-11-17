@@ -10,7 +10,7 @@ acceptance target to be measured.
 
 **Update (Haru-4B, 2026-11-16).** The handover premise changes: Haru-4B's text stream is
 an input on every 133 ms frame, so an answer can be injected mid-utterance with no turn
-boundary and no re-prefill (`haru-injection.md`). The role split below still holds —
+boundary and no re-prefill (`vani-injection.md`). The role split below still holds —
 the 4B is the voice and timing, and the text is supplied from outside — a bigger
 model, a template, or a hardcoded script — but the seam protocol (boundary handover,
 cue phrase, one short sentence per turn) is the LFM3 fallback, not the target

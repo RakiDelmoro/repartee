@@ -1,4 +1,4 @@
-# Running Haru-4B on 8 GB: 4-bit LM, fp16 audio
+# Running Vani on 8 GB: 8-bit LM, bf16 audio
 
 Goal: fit the 10.5 GB checkpoint into the 8 GB Quadro RTX 4000 without changing what the
 model says, as far as our tests can tell. "Lossless 4-bit" is not a thing; the target is
@@ -8,38 +8,37 @@ model says, as far as our tests can tell. "Lossless 4-bit" is not a thing; the t
 
 | part | precision | why |
 |---|---|---|
-| `lm.*` Linear layers | **4-bit NF4, double quant** | ~6 GB saved; the LM has the redundancy |
+| `lm.*` Linear layers | **8-bit weight-only, int8 + Triton GEMV** | near-bf16 text stream; 4-bit NF4 fails the audio gate |
 | `lm.embed_tokens` (tied output) | bf16 | text logits are computed from this weight; kept off the dequant path |
 | `head.*` (MeanFlow) | bf16 | its output *is* the audio latent; tiny, no redundancy |
 | `codec.*` (convs) | bf16 | output is the waveform; conv quantization is fragile and saves little |
 | audio projections | bf16 | 64 → 2560, between audio and LM |
 | RMSNorm, rotary buffers, `latent_scale/bias` | float32 | explicit upcasts in the model; they set numeric scale |
 
-Fallback ladder: if 4-bit fails a quality gate, raise the LM to 8-bit (same loader,
-`--lm-bits 8`); if it still fails, run bf16 on rented hardware. Do not quantize the audio
-path to compensate.
+The 4-bit ladder was measured and rejected: uniform NF4 and 4-bit MLP both destroyed the
+audio (see “Quality: 4-bit fails”). Keep the LM at 8-bit; bf16 is the fidelity reference
+on rented hardware. Do not quantize the audio path to compensate.
 
 ## Loader
 
-`research/haru_quant.py` implements the order that keeps the 8 GB card from holding a
+`vani/quantize.py` implements the order that keeps the 8 GB card from holding a
 bf16 copy:
 
 1. load the checkpoint on **CPU** in bf16 (`load_model(..., device="cpu")`);
-2. replace every `nn.Linear` under `model.lm` with `bitsandbytes` `Linear4bit`
-   (`compute_dtype=float16`, `quant_type="nf4"`, `compress_statistics=True`), copying the
-   bf16 weights in;
+2. replace every `nn.Linear` under `model.lm` with `Int8Linear` (symmetric
+   per-output-channel weights, `torch._weight_int8pack_mm`; batch-1 frames go through
+   the Triton GEMV in `vani/gemv.py`);
 3. cast the remaining **parameters** to bf16 (the checkpoint's dtype); leave buffers
    float32;
-4. `model.to("cuda")`: bnb quantizes the 4-bit weights during the move, the rest arrives
-   as bf16.
+4. `model.to("cuda")`; embeddings, head, codec and audio projections stay bf16.
 
 fp16 was tried first and is wrong for this checkpoint: the real model produced non-finite
 logits at `start()` (`multinomial` assertion on inf/NaN) with fp16 parameters and bf16
 weights converted, while the same loader in bf16 runs. bf16 is also what the checkpoint
 was trained in; Turing runs it, slower than native bf16 hardware but correctly.
 
-`Linear4bit` only replaces `nn.Linear`; conv stacks, embeddings and norms are untouched.
-The model's per-frame text logits still multiply the fp16 embedding weight, so no
+`Int8Linear` only replaces `nn.Linear`; conv stacks, embeddings and norms are untouched.
+The model's per-frame text logits still multiply the bf16 embedding weight, so no
 dequantization is added to the 7.5 Hz hot path.
 
 ## What must pass
@@ -57,9 +56,9 @@ build:
 | F0 drift vs bf16 | bounded; no register jump |
 | duplex behaviour | still overlaps, stops, backchannels |
 
-`research/haru_inject.py --lm-bits 4` runs the five scenarios and ASR-gates the injected
-sentences; `research/haru_quant.py --frames 40 --speak-first --float-dtype bf16` is the
-load/VRAM/latency probe.
+`python -m vani.session --lm-bits 8 --backend int8` runs the five scenarios and ASR-gates
+the injected sentences; `python -m vani.quantize --backend int8 --frames 40 --speak-first`
+is the load/VRAM/latency probe.
 
 ### First measurement
 
@@ -108,7 +107,7 @@ on CUDA, 8-bit needs a larger GPU than 8 GB.
 
 ### 8-bit on this card: quality is solved, 133 ms is not
 
-A custom weight-only int8 path (`research/int8_linear.py` + `research/int8_gemv.py`) keeps
+A custom weight-only int8 path (`vani/int8.py` + `vani/gemv.py`) keeps
 the LM text stream near bf16 and uses a Triton GEMV for the batch-1 matmuls:
 
 | build | ms/frame | VRAM | audio |

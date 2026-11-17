@@ -1,6 +1,6 @@
 # Seam test results (first run)
 
-Actor: LFM3-Audio-2B, base weights. Harness: `research/seam_test.py`, output
+Actor: LFM3-Audio-2B, base weights. Harness: legacy `seam_test.py` (removed from the working tree; see git history), output
 `data/seam/`. Question: when handed text is spoken mid-conversation, is the defect
 caused by the moment, the cue, or the actor itself?
 
@@ -142,7 +142,7 @@ sound like thinking or like choppiness.
 
 ## Full-loop sample
 
-`research/full_flow.py` renders the whole interaction into one file
+The legacy `full_flow.py` (removed; git history) rendered the whole interaction into one file
 (`data/flow/full_flow.wav`, 50.1 s):
 
 | t | segment |

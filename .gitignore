@@ -1,7 +1,23 @@
+# datasets and model weights
 data/
 models/
 samples/
 vendor/
+open-yap-*/
+open-yap-*_flac_*/
+
+# training artifacts
+checkpoints/
+*.pt
+*.safetensors
+*.gguf
+*.npy
+*.npz
+*.log
+*.wav
+*.flac
+
+# local/runtime
 __pycache__/
 *.pyc
 .venv/

@@ -1,4 +1,4 @@
-# Haru-4B: full duplex with text injected at any time
+# Vani: full duplex with text injected at any time (Haru-4B base)
 
 Requirement: the model listens and speaks at the same time, and **text can be handed to
 it at any moment** — while the user speaks, while the model speaks, or while the model
@@ -176,7 +176,7 @@ bypassed on every frame. That is the whole control guarantee.
 
 ## 4. The schedule
 
-The scheduler is `app/inject.py`; it builds a list of token ids, one per frame. Three
+The scheduler is `vani/inject.py`; it builds a list of token ids, one per frame. Three
 rules matter, and each comes from the trained stream rather than taste:
 
 1. **Dense tokens, no gaps.** One token per frame, with no PADs between words. This was
@@ -203,7 +203,7 @@ normal English, so it matches speech without artificial gaps.
 ## 5. Reference implementation
 
 ```python
-class TextInjector:                      # app/inject.py, lock-protected
+class TextInjector:                      # vani/inject.py, lock-protected
     def speak(text, wait=False, interrupt=True, gap=1, ...) -> list[int]:
         ...                              # tokenize, EOP/word gaps, queue or defer
     def poll() -> int | None:            # once per frame, before sampling
@@ -211,7 +211,7 @@ class TextInjector:                      # app/inject.py, lock-protected
     def observe(token):                  # after every frame
         ...                              # PAD-run counter for idle detection
 
-class InjectedSession(DuplexSession):    # research/haru_inject.py
+class VaniSession(DuplexSession):    # vani/session.py
     def inject(text, **kw):
         return self.injector.speak(text, **kw)
     def _emit(self, hidden, started):
@@ -229,7 +229,7 @@ class InjectedSession(DuplexSession):    # research/haru_inject.py
 `poll()`/`observe()`; the lock serialises the queue. The model step itself stays
 single-threaded.
 
-`research/haru_inject.py` runs five scenarios on a checkpoint: `baseline_own_speech`
+`vani/session.py` runs five scenarios on a checkpoint: `baseline_own_speech`
 (cadence), `listen_inject` (silent model), `speak_inject` (mid-utterance pivot),
 `user_talking_inject` (user speaking → overlap), `scripted_control` (hardcoded text,
 PAD whenever idle). It writes the model channel, the user
@@ -238,7 +238,7 @@ channel, a stereo mix, per-frame tokens/text, and ASR recall of the injected sen
 
 ```bash
 # needs the 10.5 GB checkpoint and ~12 GB of GPU; CPU is offline-only
-.venv/bin/python research/haru_inject.py --model /path/to/Haru-4B --device cpu \
+.venv/bin/python vani/session.py --model /path/to/Haru-4B --device cpu \
     --dtype float32 --out data/haru_inject
 ```
 

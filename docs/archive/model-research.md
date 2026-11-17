@@ -57,8 +57,8 @@ Three consequences:
   When the model is silent, an injected sentence should start with EOP; mid-utterance it
   must not.
 
-Harness and design: `research/haru_inject.py` and [haru-injection.md](haru-injection.md);
-the schedule lives in `app/inject.py`. The injected text controls the words; the model
+Harness and design: `vani/session.py` and [vani-injection.md](vani-injection.md);
+the schedule lives in `vani/inject.py`. The injected text controls the words; the model
 keeps voice, prosody and listening, and can be held to a script (`scripted=True`) so it
 never free-samples. Cost: the 4B needs ~12 GB of GPU memory, so it was not run on this
 8 GB box; the blog's 65 ms is Apple Silicon, 15 ms/step is a B300.
