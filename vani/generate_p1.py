@@ -31,11 +31,14 @@ def main() -> None:
     ap.add_argument("--qwen", default=str(ROOT / "models" / "Qwen3-0.6B-Base"))
     ap.add_argument("--mimi", default=str(ROOT / "models" / "mimi"))
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "vani_p1_gen")
+    ap.add_argument("--start-frame", type=int, default=0)
     ap.add_argument("--prompt-frames", type=int, default=128)
     ap.add_argument("--frames", type=int, default=192)
     ap.add_argument("--window", type=int, default=192)
     ap.add_argument("--top-k", type=int, default=8)
     ap.add_argument("--temperature", type=float, default=0.8)
+    ap.add_argument("--text-mode", choices=["free", "target"], default="free")
+    ap.add_argument("--audio-mode", choices=["free", "gt0_1", "gt2_7"], default="free")
     ap.add_argument("--device", default="cuda")
     args = ap.parse_args()
 
@@ -45,7 +48,9 @@ def main() -> None:
     model.eval()
 
     grid = np.load(args.grid, mmap_mode="r")
-    prompt = np.asarray(grid[: args.prompt_frames], dtype=np.int64)
+    end = args.start_frame + args.prompt_frames + args.frames
+    target_grid = np.asarray(grid[args.start_frame:end], dtype=np.int64)
+    prompt = target_grid[: args.prompt_frames]
     history = torch.from_numpy(prompt)[None].to(args.device)
     generated = []
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
@@ -53,7 +58,10 @@ def main() -> None:
             x = history[:, -args.window :]
             hidden = model.temporal_hidden(x)
             text_logits = model.lm_head(hidden[:, -1:])[0, 0]
-            text = sample(text_logits, args.top_k, args.temperature)
+            if args.text_mode == "target":
+                text = int(target_grid[args.prompt_frames + len(generated), 0])
+            else:
+                text = sample(text_logits, args.top_k, args.temperature)
             h = hidden[0, -1]
             prev = [CODEBOOK_SIZE] * CODEBOOKS
             codes = []
@@ -67,6 +75,12 @@ def main() -> None:
                 depth_out = model.depth(depth_in)
                 codes.append(sample(model.audio_head[cb](depth_out[0, cb]), args.top_k, args.temperature))
                 prev[cb] = codes[-1]
+            if args.audio_mode == "gt0_1":
+                truth = target_grid[args.prompt_frames + len(generated), 1:3]
+                codes[0:2] = [int(v) for v in truth]
+            elif args.audio_mode == "gt2_7":
+                truth = target_grid[args.prompt_frames + len(generated), 3:9]
+                codes[2:8] = [int(v) for v in truth]
             frame = torch.zeros((1, 1, 17), dtype=torch.long, device=args.device)
             frame[0, 0, 0] = text
             frame[0, 0, 1 : 1 + CODEBOOKS] = torch.tensor(codes, device=args.device)
@@ -78,13 +92,24 @@ def main() -> None:
     audio = decode_chunks(mimi, codes)
     args.out.mkdir(parents=True, exist_ok=True)
     np.save(args.out / "codes.npy", codes)
-    np.save(args.out / "text.npy", history[0, args.prompt_frames :, 0].cpu().numpy())
+    text_ids = history[0, args.prompt_frames :, 0].cpu().numpy()
+    np.save(args.out / "text.npy", text_ids)
+    target_ids = target_grid[args.prompt_frames :, 0]
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.qwen)
+    (args.out / "target_text.txt").write_text(
+        tokenizer.decode(target_ids.tolist(), skip_special_tokens=True).strip() + "\n"
+    )
+    (args.out / "generated_text.txt").write_text(
+        tokenizer.decode(text_ids.tolist(), skip_special_tokens=True).strip() + "\n"
+    )
     sf.write(args.out / "generated.wav", audio, SAMPLE_RATE)
     prompt_audio = decode_chunks(mimi, prompt[:, 1 : 1 + CODEBOOKS])
     sf.write(args.out / "prompt.wav", prompt_audio, SAMPLE_RATE)
     print(
         f"wrote {args.out} codes={codes.shape} "
-        f"prompt={len(prompt_audio)/SAMPLE_RATE:.1f}s audio={len(audio)/SAMPLE_RATE:.1f}s"
+        f"prompt={len(prompt_audio)/SAMPLE_RATE:.1f}s audio={len(audio)/SAMPLE_RATE:.1f}s "
+        f"text={args.text_mode} audio={args.audio_mode} start={args.start_frame}"
     )
 
 

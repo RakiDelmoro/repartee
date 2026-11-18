@@ -69,6 +69,12 @@ def main() -> None:
     ap.add_argument("--resume", type=Path, default=None)
     ap.add_argument("--loss-scale", type=float, default=1.0)
     ap.add_argument("--accum", type=int, default=1)
+    ap.add_argument("--self-cond", type=float, default=0.0,
+                    help="max probability of feeding own previous audio predictions")
+    ap.add_argument("--self-cond-codebooks", type=int, default=8,
+                    help="number of previous codebooks replaced by predictions; "
+                         "8 matches free-running generation")
+    ap.add_argument("--self-cond-warmup", type=int, default=1000)
     args = ap.parse_args()
 
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -129,6 +135,24 @@ def main() -> None:
             inputs[:, 1:, :] = target[:, :-1, :]
             inputs[:, 0, 0] = TEXT_PAD
 
+            p_self = min(args.self_cond, args.self_cond * step / max(1, args.self_cond_warmup))
+            if p_self > 0:
+                with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+                    _, tf_audio = model(inputs, target)
+                pred = tf_audio.argmax(-1)
+                mixed = inputs.clone()
+                use = torch.rand(
+                    (target.shape[0], target.shape[1] - 1, 1),
+                    device=target.device,
+                ) < p_self
+                cond = min(args.self_cond_codebooks, 8)
+                mixed[:, 1:, 1:1 + cond] = torch.where(
+                    use,
+                    pred[:, :-1, :cond],
+                    mixed[:, 1:, 1:1 + cond],
+                )
+                inputs = mixed
+
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 text_logits, audio_logits = model(inputs, target)
                 text_mask = target[:, :, 0] != TEXT_PAD
@@ -187,7 +211,7 @@ def main() -> None:
             mem = torch.cuda.max_memory_allocated() / 1e9
             print(
                 f"step {step} loss={loss_value:.3f} text={text_value:.3f} "
-                f"{cbs} maxmem={mem:.2f}GB skip={skipped} accum={args.accum} "
+                f"{cbs} maxmem={mem:.2f}GB skip={skipped} accum={args.accum} p={p_self:.2f} "
                 f"{time.time()-started:.0f}s",
                 flush=True,
             )

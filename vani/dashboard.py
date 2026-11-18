@@ -18,8 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(__file__).resolve().parent / "web"
-RUN = ROOT / "checkpoints" / "p1_28h"
-LOG = RUN / "train.log"
+CHECKPOINTS = ROOT / "checkpoints"
 P0 = ROOT / "data" / "vani_p0_45"
 P0_TARGET = 45
 DEFAULT_STEPS = 5000
@@ -29,17 +28,29 @@ DEFAULT_STRIDE = 128
 
 LINE = re.compile(
     r"step (\d+) loss=([0-9.]+) text=([0-9.]+) "
-    r"cb0=([0-9.]+) cb1=([0-9.]+) cb2=([0-9.]+) cb3=([0-9.]+) "
-    r"cb4=([0-9.]+) cb5=([0-9.]+) cb6=([0-9.]+) cb7=([0-9.]+) "
-    r"maxmem=([0-9.]+)GB skip=(\d+) accum=(\d+) (\d+)s"
+    r"(.*?) maxmem=([0-9.]+)GB skip=(\d+) accum=(\d+)"
+    r"(?: p=([0-9.]+))? (\d+)s"
 )
 
 app = FastAPI(title="Vani-M dashboard")
 app.mount("/static", StaticFiles(directory=WEB), name="static")
 
 
-def run_config() -> dict:
-    path = RUN / "run.json"
+def active_run() -> Path:
+    env = os.environ.get("VANI_RUN")
+    if env:
+        return ROOT / env
+    proc = training_process()
+    if proc and proc.get("out"):
+        return ROOT / proc["out"]
+    logs = list(CHECKPOINTS.glob("*/train.log"))
+    if logs:
+        return max(logs, key=lambda p: p.stat().st_mtime).parent
+    return CHECKPOINTS / "p1_28h"
+
+
+def run_config(run: Path) -> dict:
+    path = run / "run.json"
     if path.exists():
         try:
             return json.loads(path.read_text())
@@ -82,11 +93,14 @@ def training_process() -> dict | None:
             cmd = " ".join(proc.info["cmdline"] or [])
             if "vani.train_p1" in cmd:
                 mem = proc.info["memory_info"]
+                parts = cmd.split()
+                out = parts[parts.index("--out") + 1] if "--out" in parts else None
                 return {
                     "pid": proc.info["pid"],
                     "cpu": round(proc.info["cpu_percent"] or 0.0, 1),
                     "rss_gb": round((mem.rss if mem else 0) / 1e9, 2),
                     "elapsed": round(datetime.now(timezone.utc).timestamp() - proc.info["create_time"], 0),
+                    "out": out,
                 }
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -94,14 +108,16 @@ def training_process() -> dict | None:
 
 
 def read_log() -> dict:
-    cfg = run_config()
+    run = active_run()
+    log = run / "train.log"
+    cfg = run_config(run)
     steps_total = int(cfg.get("steps", DEFAULT_STEPS))
     accum = int(cfg.get("accum", DEFAULT_ACCUM))
     records = []
     lines = []
-    if LOG.exists():
+    if log.exists():
         try:
-            lines = LOG.read_text(errors="replace").splitlines()[-2000:]
+            lines = log.read_text(errors="replace").splitlines()[-2000:]
         except Exception:
             lines = []
     for line in lines:
@@ -109,16 +125,19 @@ def read_log() -> dict:
         if not m:
             continue
         vals = m.groups()
+        cbs = re.findall(r"cb(\d+)=([0-9.]+)", vals[3])
+        cb_values = [float(v) for _, v in cbs]
         records.append(
             {
                 "step": int(vals[0]),
                 "loss": float(vals[1]),
                 "text": float(vals[2]),
-                "cb": [float(v) for v in vals[3:11]],
-                "maxmem": float(vals[11]),
-                "skip": int(vals[12]),
-                "accum": int(vals[13]),
-                "elapsed": int(vals[14]),
+                "cb": cb_values,
+                "maxmem": float(vals[4]),
+                "skip": int(vals[5]),
+                "accum": int(vals[6]),
+                "p": float(vals[7]) if vals[7] else None,
+                "elapsed": int(vals[8]),
             }
         )
     latest = records[-1] if records else None
@@ -138,6 +157,7 @@ def read_log() -> dict:
         state = "tokenizing"
     return {
         "state": state,
+        "run": str(run.relative_to(ROOT)),
         "steps_total": steps_total,
         "step": latest["step"] if latest else 0,
         "progress": round((latest["step"] / steps_total) if latest and steps_total else 0.0, 4),
@@ -229,9 +249,10 @@ def system_stats() -> dict:
 
 
 def data_stats() -> dict:
+    run = active_run()
     checkpoints = []
-    if RUN.exists():
-        for path in sorted(RUN.glob("*.pt")):
+    if run.exists():
+        for path in sorted(run.glob("*.pt")):
             try:
                 checkpoints.append(
                     {
@@ -248,7 +269,7 @@ def data_stats() -> dict:
         "checkpoints": checkpoints,
         "grids": len(grids),
         "grid_bytes": sum(p.stat().st_size for p in grids if p.exists()),
-        "log_bytes": LOG.stat().st_size if LOG.exists() else 0,
+        "log_bytes": (run / "train.log").stat().st_size if (run / "train.log").exists() else 0,
     }
 
 
