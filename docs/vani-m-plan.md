@@ -1,9 +1,8 @@
 # Vani-M plan: a local, trainable, full-duplex mouth
 
-Status: **P0 passed. The first 8.6 h P1 run failed the listening gate. Dataset
-scaled to 45 conversations / 29.6 h; 5,000-step all-codebook retrain is running.
-P2 remains blocked.**
-This is a new small model, not a patch to Vani-4B/Haru.
+Status: **P0 passed. P1 remains open: the 29.6 h baseline and both
+self-conditioning variants failed the intelligibility gate. P2 and P3 are
+blocked.** This is a new small model, not a patch to Vani-4B/Haru.
 
 ## What we want
 
@@ -15,6 +14,34 @@ This is a new small model, not a patch to Vani-4B/Haru.
 6. trained on Open Yap, no rented GPU;
 7. **speaks immediately from its own knowledge**; injected text is an override, not a
    prerequisite. There is no “waiting for text” state.
+
+## Reading the stages
+
+The phases are not four variants of the same model. Each adds one capability:
+
+| stage | input | output | listening? |
+|---|---|---|---|
+| **P0** | Open Yap audio | 17-stream Mimi grid + text alignment | — |
+| **P1** | target text + previous **agent** audio | next agent text + 8 agent audio codes | no |
+| **P2** | user audio + agent audio | agent text + agent audio while listening | yes |
+| **P3** | P2 streams + forced agent text | agent speech containing the injected text | yes |
+| **P4** | passing P1–P3 recipe | 1,000 h scale + streaming runtime | yes |
+
+**P1 is not speech-to-speech.** It is agent-only speech continuation: the model is
+given target text and its own previous audio frame, and predicts the next agent frame.
+The user audio channels exist in the 17-stream grid but are zeroed and receive no loss.
+Listening starts in P2.
+
+The shorthand “text → agent speech” means:
+
+```
+target text + previous agent audio
+    -> next agent text token
+    -> next 8 agent audio codes
+```
+
+It is not ordinary text-to-speech from a blank start. A prompt of held-out agent audio
+establishes voice, timing, and acoustic context; the text controls what is said.
 
 ## Model
 
@@ -134,10 +161,9 @@ the text. If fine codebooks stay flat, do not start P2; increase clean hours, de
 capacity, or change per-codebook weighting.
 
 **P1 scale-up (2026-11-17).** P0 now covers 45 conversations / 29.6 h
-(1,332,750 frames, 45/45 tokenized). The all-codebook model is retraining for 5,000
-optimizer steps with gradient accumulation 2, resuming from the 8.6 h checkpoint.
-Dashboard: `http://127.0.0.1:8765`; log: `checkpoints/p1_28h/train.log`. Do not
-start P2 until the held-out audio gate passes.
+(1,332,750 frames, 45/45 tokenized). The all-codebook model resumed from the 8.6 h
+checkpoint and trained for 5,000 optimizer steps with gradient accumulation 2.
+Dashboard: `http://127.0.0.1:8765`; log: `checkpoints/p1_28h/train.log`.
 
 **P1 result (2026-11-17, 8.6 h subset).** Two 2,000-step runs (cb0–1, then all 8) on 14
 conversations, holdout `conv_d65ed16a6092`. Held-out teacher-forced accuracy:
@@ -153,6 +179,28 @@ intelligible even after normalization; free-run cannot be better. **Gate failed.
 likely causes are training hours, not pipeline: 8.6 h is below the planned 20–50 h and
 the stage-2 loss plateaued. Scale to ~28 h before changing architecture or loss weights.
 Do not start P2.
+
+**P1 result (2026-11-18, 29.6 h).** The 5,000-step all-codebook baseline still failed
+the dense held-out gate: free-run cb0/cb1 accuracy was roughly 1–3%, and text-forced
+audio gave WER **0.971**. Two self-conditioning diagnostics also failed:
+
+| run | cb0 free-run | cb1 free-run | dense WER |
+|---|---:|---:|---:|
+| 29.6 h baseline | ~1% | ~2% | 0.971 |
+| coarse-only scheduled sampling | 3.65% | 0.52% | 0.926 |
+| all-8 self-conditioning | 2.60% | 1.04% | 0.985 |
+
+The codebook-swap ablation localises the failure to coarse content:
+
+| variant | cb0–1 | cb2–7 | WER |
+|---|---|---|---:|
+| all ground truth | ground truth | ground truth | 0.397 |
+| `gt0_1` | ground truth | generated | 0.412 |
+| `gt2_7` | generated | ground truth | 0.985 |
+
+When coarse codes are correct, generated fine codes are sufficient for intelligible
+words. When coarse codes are generated freely, content is lost. The P1 gate remains
+open; P2 and P3 stay blocked.
 
 ### P2 — duplex stage
 

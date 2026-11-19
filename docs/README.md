@@ -50,7 +50,7 @@ runtime yet.
 | Structured events (decisions/actions/owners) | future: needs a bigger model, measured in `knowledge-base.md` |
 | Device firmware | not started (hardware not delivered); the host listener is the reference behaviour |
 | Vani-M P0: Mimi grid + decode round-trip | **passed perceptually** on 45 conversations / 29.6 h |
-| Vani-M P1: agent-only alignment, all codebooks | **in progress**: first 8.6 h pass failed the listening gate; 29.6 h / 5,000-step run training |
+| Vani-M P1: agent-only alignment, all codebooks | **gate open**: 29.6 h baseline WER 0.971; coarse-only and all-8 self-conditioning also failed |
 | Vani-M dashboard | **built** at `vani/dashboard.py`; shows loss, codebooks, GPU/CPU, data, checkpoints, live log |
 | Vani-M P2 duplex / P3 injection | blocked until P1 audio gate passes |
 
