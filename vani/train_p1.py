@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
+import re
 import time
 from pathlib import Path
 
@@ -15,13 +17,32 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-from .model import CODEBOOK_SIZE, TEXT_PAD, VaniM
+from .model import CODEBOOK_SIZE, TEXT_PAD, VaniM, load_vani_state
 
 ROOT = Path(__file__).resolve().parents[1]
+VOICE_RMS = 0.01
+
+
+def save_checkpoint(path: Path, payload: dict) -> None:
+    """Write atomically so a crash cannot leave a half checkpoint."""
+    tmp = path.with_suffix(".tmp")
+    torch.save(payload, tmp)
+    tmp.replace(path)
+
+
+def prune_checkpoints(out: Path, keep: int) -> None:
+    """Keep only the newest ``keep`` step-*.pt files; last.pt is separate."""
+    files = sorted(
+        out.glob("step-*.pt"),
+        key=lambda p: int(re.search(r"step-(\d+)", p.name).group(1)),
+    )
+    for old in files[:-keep]:
+        old.unlink()
 
 
 class GridWindows(Dataset):
-    def __init__(self, root: Path, window: int = 192, stride: int = 128, holdout: str | None = None):
+    def __init__(self, root: Path, window: int = 192, stride: int = 128,
+                 holdout: str | None = None, min_voiced: float = 0.0):
         self.files = sorted(root.glob("*.grid.npy"))
         if holdout:
             self.files = [p for p in self.files if holdout not in p.name]
@@ -32,9 +53,20 @@ class GridWindows(Dataset):
         self.window = window
         self.arrays = [np.load(p, mmap_mode="r") for p in self.files]
         self.lengths = [len(a) for a in self.arrays]
+        self.rms = []
+        self.words = []
+        for path in self.files:
+            rms_path = path.with_name(path.name.replace(".grid.npy", ".rms.npy"))
+            word_path = path.with_name(path.name.replace(".grid.npy", ".word.npy"))
+            self.rms.append(np.load(rms_path, mmap_mode="r") if rms_path.exists() else None)
+            self.words.append(np.load(word_path, mmap_mode="r") if word_path.exists() else None)
         self.index = []
         for i, length in enumerate(self.lengths):
             for start in range(0, max(1, length - window), stride):
+                if min_voiced > 0 and self.rms[i] is not None:
+                    voiced = np.asarray(self.rms[i][start : start + window]) > VOICE_RMS
+                    if voiced.size == 0 or voiced.mean() < min_voiced:
+                        continue
                 self.index.append((i, start))
 
     def __len__(self) -> int:
@@ -47,12 +79,24 @@ class GridWindows(Dataset):
             pad = np.zeros((self.window - len(grid), grid.shape[1]), dtype=np.int64)
             pad[:, 0] = TEXT_PAD
             grid = np.concatenate([grid, pad], axis=0)
-        return torch.from_numpy(grid)
+        if self.rms[file_index] is None:
+            rms = np.full(len(grid), VOICE_RMS, dtype=np.float32)
+        else:
+            rms = np.asarray(self.rms[file_index][start : start + self.window], dtype=np.float32)
+            if len(rms) < len(grid):
+                rms = np.pad(rms, (0, len(grid) - len(rms)))
+        if self.words[file_index] is None:
+            word = np.asarray(grid[:, 0], dtype=np.int64)
+        else:
+            word = np.asarray(self.words[file_index][start : start + self.window], dtype=np.int64)
+            if len(word) < len(grid):
+                word = np.pad(word, (0, len(grid) - len(word)), constant_values=TEXT_PAD)
+        return torch.from_numpy(grid), torch.from_numpy(rms), torch.from_numpy(word)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--grids", type=Path, default=ROOT / "data" / "vani_p0_10h")
+    ap.add_argument("--grids", type=Path, default=ROOT / "data" / "vani_p0_45")
     ap.add_argument("--qwen", default=str(ROOT / "models" / "Qwen3-0.6B-Base"))
     ap.add_argument("--steps", type=int, default=200)
     ap.add_argument("--window", type=int, default=192)
@@ -63,7 +107,13 @@ def main() -> None:
     ap.add_argument("--lr-qwen", type=float, default=1e-5)
     ap.add_argument("--lr-new", type=float, default=1e-4)
     ap.add_argument("--save-every", type=int, default=200)
-    ap.add_argument("--out", type=Path, default=ROOT / "checkpoints" / "p1")
+    ap.add_argument("--keep-checkpoints", type=int, default=5,
+                    help="newest step-*.pt files to retain; minimum 5")
+    ap.add_argument("--step-offset", type=int, default=0,
+                    help="display offset for resumed runs (dashboard progression)")
+    ap.add_argument("--text-cond", choices=["sparse", "word"], default="sparse",
+                    help="sparse = deployable per-frame text stream; word = held-word probe")
+    ap.add_argument("--out", type=Path, default=ROOT / "checkpoints" / "p1_text29h")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--holdout", default=None)
     ap.add_argument("--resume", type=Path, default=None)
@@ -75,18 +125,24 @@ def main() -> None:
                     help="number of previous codebooks replaced by predictions; "
                          "8 matches free-running generation")
     ap.add_argument("--self-cond-warmup", type=int, default=1000)
+    ap.add_argument("--min-voiced", type=float, default=0.25,
+                    help="minimum fraction of voiced frames in a sampled window")
+    ap.add_argument("--voice-weight", type=float, default=2.0,
+                    help="extra loss weight for frames above VOICE_RMS")
     args = ap.parse_args()
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    data = GridWindows(args.grids, args.window, args.stride, args.holdout)
+    data = GridWindows(args.grids, args.window, args.stride, args.holdout,
+                       min_voiced=args.min_voiced)
     loader = DataLoader(data, batch_size=1, shuffle=True, num_workers=0)
-    print(f"windows={len(data)} files={len(data.files)} window={args.window} holdout={args.holdout}", flush=True)
+    print(f"grids={data.files[0].parent} windows={len(data)} files={len(data.files)} "
+          f"window={args.window} holdout={args.holdout} "
+          f"min_voiced={args.min_voiced}", flush=True)
 
     model = VaniM(args.qwen, dtype=torch.bfloat16).to(args.device)
     if args.resume:
-        state = torch.load(args.resume, map_location="cpu", weights_only=False)
-        model.load_state_dict(state["model"], strict=True)
+        state = load_vani_state(model, args.resume)
         print(f"resumed {args.resume} at step {state.get('step')}", flush=True)
     model.train()
     model.temporal.gradient_checkpointing_enable(
@@ -114,7 +170,24 @@ def main() -> None:
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
+    keep = max(5, args.keep_checkpoints)
     active = min(args.active_codebooks, 8)
+    (args.out / "run.json").write_text(json.dumps({
+        "steps": args.steps + args.step_offset,
+        "step_offset": args.step_offset,
+        "additional_steps": args.steps,
+        "accum": args.accum,
+        "window": args.window,
+        "stride": args.stride,
+        "grids": str(args.grids),
+        "holdout": args.holdout,
+        "min_voiced": args.min_voiced,
+        "voice_weight": args.voice_weight,
+        "active_codebooks": active,
+        "keep_checkpoints": keep,
+        "resume": str(args.resume) if args.resume else None,
+        "text_cond": args.text_cond,
+    }, indent=2) + "\n")
     started = time.time()
     running = []
     skipped = 0
@@ -127,10 +200,15 @@ def main() -> None:
         skipped_step = False
         for _ in range(args.accum):
             try:
-                target = next(it).to(args.device)
+                target, rms, word = next(it)
             except StopIteration:
                 it = iter(loader)
-                target = next(it).to(args.device)
+                target, rms, word = next(it)
+            target = target.to(args.device)
+            rms = rms.to(args.device)
+            word = word.to(args.device)
+            cond = word if args.text_cond == "word" else target[:, :, 0]
+            frame_w = 1.0 + args.voice_weight * (rms > VOICE_RMS).float()
             inputs = torch.zeros_like(target)
             inputs[:, 1:, :] = target[:, :-1, :]
             inputs[:, 0, 0] = TEXT_PAD
@@ -138,7 +216,7 @@ def main() -> None:
             p_self = min(args.self_cond, args.self_cond * step / max(1, args.self_cond_warmup))
             if p_self > 0:
                 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-                    _, tf_audio = model(inputs, target)
+                    _, tf_audio = model(inputs, target, text_cond=cond)
                 pred = tf_audio.argmax(-1)
                 mixed = inputs.clone()
                 use = torch.rand(
@@ -154,22 +232,27 @@ def main() -> None:
                 inputs = mixed
 
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                text_logits, audio_logits = model(inputs, target)
+                text_logits, audio_logits = model(inputs, target, text_cond=cond)
                 text_mask = target[:, :, 0] != TEXT_PAD
                 if text_mask.any():
-                    text_ce = F.cross_entropy(
-                        text_logits.float()[text_mask], target[:, :, 0][text_mask]
-                    )
+                    token_ce = F.cross_entropy(
+                        text_logits.float().reshape(-1, text_logits.shape[-1]),
+                        target[:, :, 0].reshape(-1),
+                        reduction="none",
+                    ).view(target.shape[0], target.shape[1])
+                    text_ce = (token_ce * frame_w)[text_mask].sum() / (
+                        frame_w * text_mask
+                    ).sum().clamp(min=1)
                 else:
                     text_ce = torch.zeros((), device=args.device)
                 cb_losses = []
                 for cb in range(active):
-                    cb_losses.append(
-                        F.cross_entropy(
-                            audio_logits[:, :, cb].float().reshape(-1, CODEBOOK_SIZE),
-                            target[:, :, 1 + cb].reshape(-1),
-                        )
-                    )
+                    per_frame = F.cross_entropy(
+                        audio_logits[:, :, cb].float().reshape(-1, CODEBOOK_SIZE),
+                        target[:, :, 1 + cb].reshape(-1),
+                        reduction="none",
+                    ).view(target.shape[0], target.shape[1])
+                    cb_losses.append((per_frame * frame_w).sum() / frame_w.sum())
                 audio_ce = torch.stack(cb_losses).mean()
                 loss = args.text_weight * text_ce + args.audio_weight * audio_ce
 
@@ -217,17 +300,19 @@ def main() -> None:
             )
         if step % args.save_every == 0:
             ckpt = args.out / f"step-{step}.pt"
-            torch.save(
+            save_checkpoint(
+                ckpt,
                 {
                     "model": model.state_dict(),
                     "step": step,
                     "args": vars(args),
                 },
-                ckpt,
             )
-            print(f"saved {ckpt}", flush=True)
+            prune_checkpoints(args.out, keep)
+            print(f"saved {ckpt} (ring={keep})", flush=True)
     ckpt = args.out / "last.pt"
-    torch.save({"model": model.state_dict(), "step": args.steps, "args": vars(args)}, ckpt)
+    save_checkpoint(ckpt, {"model": model.state_dict(), "step": args.steps,
+                           "args": vars(args)})
     print(f"saved {ckpt}", flush=True)
 
 

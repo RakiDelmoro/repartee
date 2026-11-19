@@ -1,8 +1,9 @@
 # Vani-M plan: a local, trainable, full-duplex mouth
 
-Status: **P0 passed. P1 remains open: the 29.6 h baseline and both
-self-conditioning variants failed the intelligibility gate. P2 and P3 are
-blocked.** This is a new small model, not a patch to Vani-4B/Haru.
+Status: **P0 passed. P1 remains open. The corrected 29.6 h run (2026-11-19)
+failed the gate: the codec and fine codebooks pass, but coarse content (cb0–1)
+fails. The text channel is learned but does not control the coarse prediction.
+P2 and P3 are blocked.** This is a new small model, not a patch to Vani-4B/Haru.
 
 ## What we want
 
@@ -55,6 +56,7 @@ Moshi-style, 600M–1B. Not Haru’s three-stream continuous architecture.
 | depth transformer | 12 layers (up from 6), per-codebook loss |
 | size | ~0.7–1B; fits 8 GB with batch 1 + checkpointing |
 | injection channel | agent text stream, forced per frame |
+| text conditioning | current-frame agent text is an input to the depth transformer; previous-frame text stays in the temporal backbone |
 
 Why Qwen3-0.6B: text-pretrained, the blog’s proven backbone, and text/timing converge.
 LFM3-2B is audio-native but turn-based; adapting it to duplex is a new interface too. It
@@ -152,8 +154,11 @@ This is the stage that decides whether the model can speak at all.
 - Use model-speaker turns from Open Yap (or LibriTTS-R/Emilia if Open Yap turns are too
   noisy).
 - Agent-only prediction: no user stream, no duplex.
+- Give the depth transformer the **current** frame's text token; the temporal backbone
+  keeps the previous frame's text.
 - Learn codebooks 0–1 first (semantic/coarse), then unlock 2–7.
 - Loss per codebook, with explicit acoustic weights; log each codebook separately.
+- Weight voiced frames; do not let silence dominate the loss or the accuracy metric.
 - 20–50 h; batch 1; gradient checkpointing.
 
 **Stop rule.** Teacher-forced and free-run audio must be intelligible and ASR must match
@@ -173,22 +178,104 @@ conversations, holdout `conv_d65ed16a6092`. Held-out teacher-forced accuracy:
 | accuracy | 34.7% | 42.7% | 36.4% | 28.4% | 28.1% | 32.4% | 27.3% | 33.3% | 33.6% |
 | CE | 4.16 | 3.30 | 3.85 | 4.09 | 4.07 | 4.01 | 4.16 | 4.00 | 3.62 |
 
-Chance accuracy is 0.049% per codebook, so this is real learning, not collapse. But the
+Chance accuracy is 0.049% per codebook. This table is **all frames**; most of the
+accuracy is silence (see the 2026-11-19 correction: voiced-frame cb0 is 3.75%). The
 teacher-forced predicted-code WAV (`data/vani_p1_eval/teacher_forced.wav`) is not
 intelligible even after normalization; free-run cannot be better. **Gate failed.** The
 likely causes are training hours, not pipeline: 8.6 h is below the planned 20–50 h and
 the stage-2 loss plateaued. Scale to ~28 h before changing architecture or loss weights.
 Do not start P2.
 
-**P1 result (2026-11-18, 29.6 h).** The 5,000-step all-codebook baseline still failed
-the dense held-out gate: free-run cb0/cb1 accuracy was roughly 1–3%, and text-forced
-audio gave WER **0.971**. Two self-conditioning diagnostics also failed:
+**P1 result (2026-11-18, mislabeled 29.6 h — actually 8.6 h).** The 5,000-step
+all-codebook baseline still failed the dense held-out gate: free-run cb0/cb1 accuracy
+was roughly 1–3%, and text-forced audio gave WER **0.971**. Two self-conditioning
+diagnostics also failed:
 
 | run | cb0 free-run | cb1 free-run | dense WER |
 |---|---:|---:|---:|
-| 29.6 h baseline | ~1% | ~2% | 0.971 |
-| coarse-only scheduled sampling | 3.65% | 0.52% | 0.926 |
-| all-8 self-conditioning | 2.60% | 1.04% | 0.985 |
+| 8.6 h baseline (mislabeled 29.6 h) | ~1% | ~2% | 0.971 |
+| coarse-only scheduled sampling (29.6 h) | 3.65% | 0.52% | 0.926 |
+| all-8 self-conditioning (29.6 h) | 2.60% | 1.04% | 0.985 |
+
+Both 29.6 h self-conditioning runs saved `active_codebooks: 2`; they trained only
+cb0/cb1, so neither is an all-8-codebook 29.6 h baseline.
+
+**P1 correction (2026-11-19).** The 2026-11-18 checkpoint's saved args say
+`grids=data/vani_p0_10h`; `checkpoints/p1_28h/train.log` starts with
+`windows=2824 files=14`. That model saw 8.6 h of audio, not 29.6 h:
+`vani/run_p1_28h.sh` waited for the 45 conversations but omitted
+`--grids data/vani_p0_45`, so `train_p1.py` used its default 10 h directory. The
+only runs that did use the 29.6 h set are the two self-conditioning diagnostics
+(`files=44`), and both saved `active_codebooks: 2`; neither trained all 8 audio
+codebooks on 29.6 h.
+
+The 37–44% all-frame accuracy is mostly silence. Of 24,192 held-out frames, 7,591
+are above 0.01 RMS. Voiced-frame accuracy is **3.75%** (cb0), **4.78%** (cb1) and
+0.3–0.6% (cb2–7); voiced CE is 6.5, 5.6 and 7.0–7.4. Chance is 0.049%. The 8.6 h
+model is a silence predictor, not evidence of "real learning" on speech.
+
+The dense WER table below was scored against the spaced reference, now kept at
+`data/vani_p1_gate/reference.txt`: natural speech 0.294, all-ground-truth Mimi
+codes 0.397, the 8.6 h model 0.971. The codec adds ~0.10 WER, not the bulk of the
+failure. The old 8.6 h eval artifacts have been removed; the table's numbers are
+retained as history.
+
+The old model also never gave the depth transformer the **current** frame's text.
+Text entered only through the previous frame's temporal input, so a word's first
+token arrived after the word's first audio frame. The corrected model adds a
+zero-initialised `text_to_depth` path; the 29.6 h run trains it.
+
+**P1 result (2026-11-19, 29.6 h).** `vani/run_p1_text29h.sh` trained 5,000 steps
+on 29.6 h (5,529 voice-filtered windows, batch 1 × accum 2, 4.13 h). The checkpoint
+is `checkpoints/p1_text29h/last.pt`. Held-out voiced-frame accuracy: cb0 **7.27%**,
+cb1 **5.45%**, cb2–7 0.4–1.1%; voiced CE 5.86, 5.05, 6.69–7.12. This is better than
+the 8.6 h model (3.75% / 4.78%) but still near chance.
+
+The gate (one command: `bash vani/gate_p1.sh`) gives:
+
+| variant | codes | WER |
+|---|---|---:|
+| `gt_all` | all 8 ground truth | **0.279** |
+| `gt0_1` | true coarse, generated fine | **0.353** |
+| `gt2_7` | generated coarse, true fine | 0.971 |
+| `textforced` | all model | 0.927 |
+
+So the codec and fine codebooks pass: with true coarse codes the output is within
+0.07 WER of the codec ceiling. The failure is entirely cb0–1: in free-run they are
+2.6% / 1.0% accurate on the gate segment and the model says unrelated words.
+
+The text channel is learned (`text_to_depth` norm 11.4 vs 16.3 for the main depth
+projection) but it does not control the coarse prediction. The likely causes are
+that a word token is present only on its onset frame and that an additive bias is
+too weak. Next changes, in order: (1) make the text a dedicated depth token
+(Moshi-style) rather than an additive bias; (2) hold the current word across its
+duration; (3) a cb0–1-first curriculum. Do not start P2.
+
+Listenable WAVs are in `data/vani_p1_gate/`: `original_normalized.wav`,
+`gt_all/`, `gt0_1/`, `gt2_7/`, `textforced/`, each with `generated_normalized.wav`
+and `prompt_normalized.wav`.
+
+**P1 token + coarse-first probe (2026-11-19).** A 500-step probe plus a 1,500-step
+continuation trained a dedicated text token in the depth transformer, with cb0–1
+only (`active_codebooks: 2`). Held-out voiced accuracy rose cb0 **7.27% → 10.59%**
+and cb1 **5.45% → 7.88%**; voiced CE fell 5.86→5.51 and 5.05→4.74. On word+voiced
+frames the text changes the cb0 argmax on **38.9%** of frames (KL 0.159), and
+real-word accuracy is 9.0% vs PAD 7.7%. The token is being used, but it is still
+weak. Gate not run; P1 remains open. Next: hold the current word across its
+duration, then a 2k run and gate.
+
+**P1 held-word probe (2026-11-19).** A 2,000-step held-word run (resumed from the
+2k token checkpoint, cb0–1 only) reached voiced cb0 **11.82%** and cb1 **7.73%**
+(from 10.59% / 7.88%). The word now covers 13,178 held frames on the holdout and
+changes the cb0 argmax on 32.7% of them, but real-word accuracy is only 11.4% vs
+PAD 10.4% on word+voiced frames (random 11.1%). This is the same slow slope as
+before, not a step change. **Text timing/alignment is not the main limiter.**
+Held-word is a **probe only**: it requires the runtime to hold each word for its
+duration, which the reasoner does not supply. The deployable line stays on the
+per-frame sparse text token (`p1_textslot2k`: cb0 10.59%), where the injector
+queues one token per frame with PADs and needs no word timing. Next: dense P1
+data (speech-only turns or read/aligned speech), then 100 h, then a backbone
+change. Do not run another text-timing variant first.
 
 The codebook-swap ablation localises the failure to coarse content:
 
@@ -292,6 +379,16 @@ path (Mimi, 17 streams); 1,000 h is narrow and English-only; no guarantee.
 
 ## Repo state
 
-- `app/`, `docs/`, `tests/`, dataset retained.
-- `models/`, `data/`, `vani/`, `research/`, `vendor/` removed.
-- Fresh code will live in `vani/` (Moshi-style), separate from `app/`.
+- `app/`, `docs/`, `tests/` retained.
+- `vani/` holds the Moshi-style model, training, generation, and evaluation code.
+- Deployable checkpoint: `checkpoints/p1_textslot2k/last.pt` (per-frame sparse
+  text token, cb0 10.59%) plus its `eval.json` and `text_ablation.json`.
+- Baseline evidence: `checkpoints/p1_text29h/eval.json`/`train.log`,
+  `checkpoints/p1_28h/{eval,eval_old}.json`/`run.json`/`train.log`, and the
+  `p1_coarse_sc*/train.log` diagnostics.
+- `data/vani_p0_45`: grids and `.rms.npy` voice-activity sidecars. The held-word
+  `.word.npy` sidecars were deleted (probe only); `vani/build_word_cond.py` can
+  rebuild them.
+- `data/vani_p1_gate`: validation WAVs, ASR, metrics, `reference.txt`.
+- Failed-run and probe checkpoints were deleted on 2026-11-19.
+- `models/`, `data/`, `checkpoints/` are local artifacts and are gitignored.

@@ -105,20 +105,24 @@
     $('progress').style.width = `${Math.min(100, (s.progress || 0) * 100)}%`;
     badge(s.state || 'waiting');
 
-    const recs = (s.series || []).filter((r) => isFinite(r.loss) && isFinite(r.step));
-    const totalPts = recs.map((r) => ({ x: r.step, y: r.loss }));
-    const textPts = recs.map((r) => ({ x: r.step, y: r.text }));
+    const chartX = (r) => (isFinite(r.chart_step) ? r.chart_step : r.step);
+    const recs = (s.series || []).filter((r) => isFinite(r.loss) && isFinite(chartX(r)));
+    const firstX = recs.length ? chartX(recs[0]) : 0;
+    const chartSpan = s.chart_max || total;
+    const x = (r) => chartX(r) - firstX;
+    const totalPts = recs.map((r) => ({ x: x(r), y: r.loss }));
+    const textPts = recs.map((r) => ({ x: x(r), y: r.text }));
     chart($('loss-chart'), [
       { color: '#39d0ff', alpha: 0.25, width: 1.1, data: totalPts },
       { color: '#39d0ff', width: 2.2, data: ema(totalPts) },
       { color: '#f4c66a', width: 1.6, dash: [5, 4], data: ema(textPts) },
-    ], { xmax: total, ymax: 16 });
+    ], { xmax: chartSpan, ymax: 16 });
     const cbSeries = [];
     for (let i = 0; i < 8; i++) {
-      const pts = recs.filter((r) => r.cb && isFinite(r.cb[i])).map((r) => ({ x: r.step, y: r.cb[i] }));
+      const pts = recs.filter((r) => r.cb && isFinite(r.cb[i])).map((r) => ({ x: x(r), y: r.cb[i] }));
       cbSeries.push({ color: COLORS[i], width: 1.8, data: ema(pts) });
     }
-    chart($('cb-chart'), cbSeries, { xmax: total, ymax: 9 });
+    chart($('cb-chart'), cbSeries, { xmax: chartSpan, ymax: 9 });
 
     const tail = s.tail || [];
     const log = $('log');

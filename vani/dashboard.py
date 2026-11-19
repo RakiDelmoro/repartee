@@ -19,8 +19,8 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(__file__).resolve().parent / "web"
 CHECKPOINTS = ROOT / "checkpoints"
-P0 = ROOT / "data" / "vani_p0_45"
-P0_TARGET = 45
+P0 = ROOT / "data" / "vani_p0_100h"
+P0_TARGET = 160
 DEFAULT_STEPS = 5000
 DEFAULT_ACCUM = 2
 DEFAULT_WINDOW = 192
@@ -34,6 +34,14 @@ LINE = re.compile(
 
 app = FastAPI(title="Vani-M dashboard")
 app.mount("/static", StaticFiles(directory=WEB), name="static")
+
+
+@app.middleware("http")
+async def no_store_ui(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def active_run() -> Path:
@@ -112,6 +120,7 @@ def read_log() -> dict:
     log = run / "train.log"
     cfg = run_config(run)
     steps_total = int(cfg.get("steps", DEFAULT_STEPS))
+    step_offset = int(cfg.get("step_offset", 0))
     accum = int(cfg.get("accum", DEFAULT_ACCUM))
     records = []
     lines = []
@@ -129,7 +138,8 @@ def read_log() -> dict:
         cb_values = [float(v) for _, v in cbs]
         records.append(
             {
-                "step": int(vals[0]),
+                "step": int(vals[0]) + step_offset,
+                "chart_step": int(vals[0]),
                 "loss": float(vals[1]),
                 "text": float(vals[2]),
                 "cb": cb_values,
@@ -146,8 +156,9 @@ def read_log() -> dict:
     windows = max(1, int((p0["frames"] - cfg.get("window", 192)) // max(1, cfg.get("stride", 128)))) if p0["frames"] else 0
     epochs = (latest["step"] * accum / windows) if latest and windows else 0.0
     eta = None
-    if latest and latest["step"] > 0 and latest["elapsed"] > 0 and latest["step"] < steps_total:
-        eta = round((steps_total - latest["step"]) * latest["elapsed"] / latest["step"])
+    additional_done = (latest["step"] - step_offset) if latest else 0
+    if latest and additional_done > 0 and latest["elapsed"] > 0 and latest["step"] < steps_total:
+        eta = round((steps_total - latest["step"]) * latest["elapsed"] / additional_done)
     state = "waiting"
     if proc:
         state = "training" if latest else "starting"
@@ -159,6 +170,7 @@ def read_log() -> dict:
         "state": state,
         "run": str(run.relative_to(ROOT)),
         "steps_total": steps_total,
+        "chart_max": max(1, steps_total - step_offset),
         "step": latest["step"] if latest else 0,
         "progress": round((latest["step"] / steps_total) if latest and steps_total else 0.0, 4),
         "epochs": round(epochs, 3),

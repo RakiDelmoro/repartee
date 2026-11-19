@@ -19,10 +19,16 @@ Vani-M is the local, trainable, full-duplex mouth:
 - 17 streams per 80 ms frame: agent text, 8 agent audio codes, 8 user audio codes
 - P1 trains the agent mouth only; P2 adds duplex; P3 adds text injection
 
-Current status: **P1 alignment**. The first 8.6 h run learned all 8 codebooks in
-teacher-forced evaluation but did not produce intelligible audio. The dataset is
-now scaled to 45 Open Yap conversations / ~29.6 h, and a 5,000-step all-codebook
-run is training.
+Current status: **P1 alignment, gate failed.** The gate isolates the failure: with
+true coarse codes the model reaches WER 0.353 (codec ceiling 0.279); with generated
+coarse codes it is 0.971. The codec and fine codebooks are good; coarse content
+(cb0–1) is the blocker. Token + cb0–1-first reached voiced cb0 **10.59%**; the
+held-word run reached **11.82%**, with real-vs-PAD accuracy still within ~1 point.
+Text timing/alignment is not the main limiter. Held-word is a **probe**, not the
+product path: it needs word-duration pacing at runtime. The deployable line is the
+per-frame sparse text token (cb0 10.59%). Next: dense P1 data (speech-only turns
+or read/aligned speech), then 100 h, then a backbone change. Listenable WAVs are
+in `data/vani_p1_gate/`.
 
 Full plan and gates: [`docs/vani-m-plan.md`](docs/vani-m-plan.md).
 

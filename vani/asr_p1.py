@@ -13,9 +13,14 @@ sys.path.insert(0, str(ROOT))
 from app.asr import QwenTranscriber  # noqa: E402
 
 
+def _words(text: str) -> list[str]:
+    import re
+    return re.sub(r"[^a-z0-9']+", " ", text.lower()).split()
+
+
 def wer(ref: str, hyp: str) -> float | None:
-    r = ref.lower().split()
-    h = hyp.lower().split()
+    r = _words(ref)
+    h = _words(hyp)
     if not r:
         return None
     prev = list(range(len(h) + 1))

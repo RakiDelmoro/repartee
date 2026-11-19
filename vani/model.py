@@ -31,7 +31,9 @@ class DepthTransformer(nn.Module):
         )
         self.net = nn.TransformerEncoder(layer, num_layers=layers, enable_nested_tensor=False)
         self.norm = nn.LayerNorm(dim)
-        mask = torch.triu(torch.ones(CODEBOOKS, CODEBOOKS, dtype=torch.bool), diagonal=1)
+        mask = torch.triu(
+            torch.ones(CODEBOOKS + 1, CODEBOOKS + 1, dtype=torch.bool), diagonal=1
+        )
         self.register_buffer("causal_mask", mask, persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -62,6 +64,10 @@ class VaniM(nn.Module):
             [nn.Embedding(CODEBOOK_SIZE, d) for _ in range(2 * CODEBOOKS)]
         )
         self.to_depth = nn.Linear(d, depth_dim)
+        # Current-frame text -> depth transformer.  Zero-init so an old P1
+        # checkpoint starts exactly where it left off and only learns the new path.
+        self.text_to_depth = nn.Linear(d, depth_dim)
+        self.text_pos = nn.Parameter(torch.zeros(depth_dim))
         self.code_embed = nn.Embedding(CODEBOOK_SIZE + 1, depth_dim)  # + start token
         self.code_pos = nn.Embedding(CODEBOOKS, depth_dim)
         self.depth = DepthTransformer(depth_dim, depth_layers, depth_heads)
@@ -73,6 +79,8 @@ class VaniM(nn.Module):
             nn.init.normal_(emb.weight, std=0.02)
         nn.init.normal_(self.code_embed.weight, std=0.02)
         nn.init.normal_(self.code_pos.weight, std=0.02)
+        nn.init.zeros_(self.text_to_depth.weight)
+        nn.init.zeros_(self.text_to_depth.bias)
         self.depth.causal_mask = self.depth.causal_mask  # keep buffer on module
         self.to(dtype)
 
@@ -90,26 +98,64 @@ class VaniM(nn.Module):
         out = self.temporal(inputs_embeds=emb, use_cache=False, return_dict=True)
         return out.last_hidden_state
 
-    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def text_depth(self, text: torch.Tensor) -> torch.Tensor:
+        """Text ids [B,T] or [B] -> depth vectors [B,T,1,D_depth]."""
+        if text.dim() == 1:
+            text = text[:, None]
+        return self.text_to_depth(self.text_embed(text)).unsqueeze(2)
+
+    def audio_logits(self, hidden: torch.Tensor, target_audio: torch.Tensor,
+                     text_cond: torch.Tensor) -> torch.Tensor:
+        """Depth prediction for one frame; text is the current frame's word."""
+        start = torch.full_like(target_audio[:, :, :1], CODEBOOK_SIZE)
+        prev = torch.cat([start, target_audio[:, :, :-1]], dim=2)  # [B,T,8]
+        base = self.to_depth(hidden).unsqueeze(2)
+        text = base + self.text_depth(text_cond) + self.text_pos  # [B,T,1,D]
+        sound = base + self.code_embed(prev) + self.code_pos.weight[None, None, :, :]
+        depth_in = torch.cat([text, sound], dim=2)  # [B,T,1+8,D]
+        b, t, k, dim = depth_in.shape
+        depth_out = self.depth(depth_in.reshape(b * t, k, dim))
+        depth_out = depth_out.reshape(b, t, k, dim)
+        return torch.stack(
+            [self.audio_head[cb](depth_out[:, :, 1 + cb]) for cb in range(CODEBOOKS)],
+            dim=2,
+        )
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor,
+                text_cond: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         """Teacher-forced logits.
 
-        inputs:  [B, T, 17] previous-frame codes (already shifted)
-        targets: [B, T, 17] current-frame codes
+        inputs:    [B, T, 17] previous-frame codes (already shifted)
+        targets:   [B, T, 17] current-frame codes
+        text_cond: [B, T] current-frame text ids; default is targets[:,:,0].
+                   This is the channel that lets a word control its own audio
+                   frame and is what P3 later forces.
         returns text_logits [B,T,V], audio_logits [B,T,8,2048]
         """
         hidden = self.temporal_hidden(inputs)
         text_logits = self.lm_head(hidden)
+        if text_cond is None:
+            text_cond = targets[:, :, 0]
 
         target_audio = targets[:, :, 1 : 1 + CODEBOOKS]
-        start = torch.full_like(target_audio[:, :, :1], CODEBOOK_SIZE)
-        prev = torch.cat([start, target_audio[:, :, :-1]], dim=2)  # [B,T,8]
-
-        depth_in = self.to_depth(hidden).unsqueeze(2)
-        depth_in = depth_in + self.code_embed(prev) + self.code_pos.weight[None, None, :, :]
-        b, t, k, dim = depth_in.shape
-        depth_out = self.depth(depth_in.reshape(b * t, k, dim))
-        depth_out = depth_out.reshape(b, t, k, dim)
-        audio_logits = torch.stack(
-            [self.audio_head[cb](depth_out[:, :, cb]) for cb in range(CODEBOOKS)], dim=2
-        )
+        audio_logits = self.audio_logits(hidden, target_audio, text_cond)
         return text_logits, audio_logits
+
+
+def load_vani_state(model: VaniM, path) -> dict:
+    """Load a checkpoint, tolerating the new text_to_depth path.
+
+    Older P1 checkpoints predate the current-frame text channel.  Missing keys
+    are allowed only for that zero-initialised projection.
+    """
+    state = torch.load(path, map_location="cpu", weights_only=False)
+    missing, unexpected = model.load_state_dict(state["model"], strict=False)
+    if unexpected:
+        raise RuntimeError(f"unexpected checkpoint keys: {unexpected}")
+    bad = [k for k in missing
+           if not (k.startswith("text_to_depth.") or k == "text_pos")]
+    if bad:
+        raise RuntimeError(f"missing checkpoint keys: {bad}")
+    if missing:
+        print(f"initialised new text channel: {missing}", flush=True)
+    return state
