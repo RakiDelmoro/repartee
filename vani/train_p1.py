@@ -113,6 +113,8 @@ def main() -> None:
                     help="display offset for resumed runs (dashboard progression)")
     ap.add_argument("--text-cond", choices=["sparse", "word"], default="sparse",
                     help="sparse = deployable per-frame text stream; word = held-word probe")
+    ap.add_argument("--cb-weights", default="1,1,1,1,1,1,1,1",
+                    help="per-codebook loss weights, comma separated, 8 values")
     ap.add_argument("--out", type=Path, default=ROOT / "checkpoints" / "p1_text29h")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--holdout", default=None)
@@ -172,6 +174,11 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     keep = max(5, args.keep_checkpoints)
     active = min(args.active_codebooks, 8)
+    cb_weights = [float(x) for x in args.cb_weights.split(",")]
+    if len(cb_weights) != 8:
+        raise ValueError("--cb-weights needs exactly 8 values")
+    if sum(cb_weights[:active]) <= 0:
+        raise ValueError("--cb-weights has no positive active codebook")
     (args.out / "run.json").write_text(json.dumps({
         "steps": args.steps + args.step_offset,
         "step_offset": args.step_offset,
@@ -187,6 +194,7 @@ def main() -> None:
         "keep_checkpoints": keep,
         "resume": str(args.resume) if args.resume else None,
         "text_cond": args.text_cond,
+        "cb_weights": cb_weights,
     }, indent=2) + "\n")
     started = time.time()
     running = []
@@ -253,7 +261,8 @@ def main() -> None:
                         reduction="none",
                     ).view(target.shape[0], target.shape[1])
                     cb_losses.append((per_frame * frame_w).sum() / frame_w.sum())
-                audio_ce = torch.stack(cb_losses).mean()
+                cb_w = torch.tensor(cb_weights[:active], device=args.device)
+                audio_ce = (torch.stack(cb_losses) * cb_w).sum() / cb_w.sum()
                 loss = args.text_weight * text_ce + args.audio_weight * audio_ce
 
             if not torch.isfinite(loss):
