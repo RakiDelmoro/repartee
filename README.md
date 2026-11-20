@@ -29,9 +29,12 @@ A fresh unseen conversation confirms cb0 **12.24%**, cb1 **2.37%**, and
 `gt0_1` WER **0.890** (old holdout 0.353) while `gt_all` is 0.110. The codec is
 fine; the frozen fine codebooks do not generalize, and cb1 is broken on both
 domains. A 5,000-step all-8 fine-tune **regressed both halves** (old cb0/cb1
-13.08/1.82, new 10.82/2.08; new `gt0_1` 0.986), so `p1_100h` remains the base.
-Next: cb1-weighted coarse-only, then a separate fine-code phase. New-domain WAVs
-are in `data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
+13.08/1.82, new 10.82/2.08; new `gt0_1` 0.986), and the timeboxed cb1-weighted
+and fine-only phases also failed (cb1 stayed ~2%; fine-only `gt0_1` 0.849 new,
+coarse collapsed). The **0.73 B / 100 h Open Yap P1 recipe is exhausted**;
+`p1_100h` remains the best base but fails the gate. Next: dense read/aligned P1
+speech, a larger/audio-pretrained backbone, or the product cascade. New-domain
+WAVs are in `data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
 
 Full plan and gates: [`docs/vani-m-plan.md`](docs/vani-m-plan.md).
 

@@ -1,9 +1,11 @@
 # Vani-M plan: a local, trainable, full-duplex mouth
 
-Status: **P0 passed. P1 remains open. The 100 h run moved cb0 to 14.32% but cb1
-fell to 2.11%; the 5k all-8 fine-tune regressed both the coarse and fine
-codebooks. `p1_100h` remains the base. P2 and P3 are blocked.** This is a new
-small model, not a patch to Vani-4B/Haru.
+Status: **P0 passed. P1 remains open. The 0.73 B / 100 h Open Yap recipe is
+exhausted: cb1 stayed ~2%, the all-8 and cb1-weighted runs did not fix it, and
+the fine-only phase did not adapt cb2–7 (`gt0_1` 0.849 new). Next: dense
+read/aligned P1 speech, a larger/audio-pretrained backbone, or the product
+cascade. P2 and P3 remain blocked.** This is a new small model, not a patch to
+Vani-4B/Haru.
 
 ## What we want
 
@@ -302,6 +304,23 @@ remains 0.279 / 0.110. The fine codebooks did not adapt in 5k; the all-8 loss
 degraded the coarse pair. **Do not use `p1_100h_all8` as the base.** Next:
 cb1-weighted coarse-only from `p1_100h`, and a separate fine-code phase; the
 plain all-8 recipe is falsified.
+
+**P1 timeboxed phases (2026-11-20).** Two single-variable phases from the 100 h
+coarse base (`p1_100h`), 2k + 5k steps:
+
+- **A, cb1-weighted cb0–1** (`cb_weights 1,3`): old cb0/cb1 14.08/2.23, new
+  11.66/2.14. cb1 did not move; cb0 did not improve.
+- **B, fine-only** (`cb_weights 0,0,1,1,1,1,1,1`): the shared depth moved to the
+  fine codebooks and collapsed the coarse heads (old cb0/cb1 3.46/2.46, new
+  3.38/1.26). It did not adapt the fine codes usefully: `gt0_1` old 0.912, new
+  0.849; `textforced` old 0.956, new 0.986. `gt_all` remains 0.279 / 0.110.
+
+The pre-registered contract is exhausted: cb1 stayed ~2%, and the fine-only
+phase failed `gt0_1` (new > 0.70). **The 0.73 B / 100 h Open Yap P1 recipe cannot
+pass.** `p1_100h` remains the best base (14.32/2.11 old, 12.24/2.37 new) but still
+fails the gate. Next: dense read/aligned P1 speech (the plan's fallback), a
+larger/audio-pretrained backbone, or the product cascade. No more 0.73 B / 100 h
+Open Yap tuning.
 
 The codebook-swap ablation localises the failure to coarse content:
 
