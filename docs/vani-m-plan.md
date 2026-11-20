@@ -1,9 +1,9 @@
 # Vani-M plan: a local, trainable, full-duplex mouth
 
-Status: **P0 passed. P1 remains open. The corrected 29.6 h run (2026-11-19)
-failed the gate: the codec and fine codebooks pass, but coarse content (cb0–1)
-fails. The text channel is learned but does not control the coarse prediction.
-P2 and P3 are blocked.** This is a new small model, not a patch to Vani-4B/Haru.
+Status: **P0 passed. P1 remains open. The 100 h run moved cb0 to 14.32% but cb1
+fell to 2.11%; the 5k all-8 fine-tune regressed both the coarse and fine
+codebooks. `p1_100h` remains the base. P2 and P3 are blocked.** This is a new
+small model, not a patch to Vani-4B/Haru.
 
 ## What we want
 
@@ -291,7 +291,17 @@ the 29.6 h model. A fresh unseen conversation (`conv_70cb754c9722`, not in the
 ceiling is excellent; the **frozen fine codebooks do not generalize** to the new
 speakers, and cb1 is broken on both domains. Next: unlock cb2–7 on the 100 h data
 (all-8 fine-tune) and address cb1; gate both holdouts. Do not add more data blindly.
-Checkpoint: `checkpoints/p1_100h/last.pt`.
+checkpoint: `checkpoints/p1_100h/last.pt`.
+
+**P1 all-8 100 h result (2026-11-20).** A 5,000-step all-8 fine-tune from
+`p1_100h` **regressed both halves**: old-holdout cb0/cb1 13.08% / 1.82% (base
+14.32% / 2.11%), new-domain 10.82% / 2.08% (base 12.24% / 2.37%); gate WER
+old `gt0_1` 0.912 (29.6 h all-8 was 0.353), new `gt0_1` 0.986 (100 h coarse base
+0.890); old `gt2_7` 0.941, new 0.932; textforced old 0.971, new 0.945. `gt_all`
+remains 0.279 / 0.110. The fine codebooks did not adapt in 5k; the all-8 loss
+degraded the coarse pair. **Do not use `p1_100h_all8` as the base.** Next:
+cb1-weighted coarse-only from `p1_100h`, and a separate fine-code phase; the
+plain all-8 recipe is falsified.
 
 The codebook-swap ablation localises the failure to coarse content:
 
