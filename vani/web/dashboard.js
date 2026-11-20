@@ -93,6 +93,10 @@
     status = s;
     const total = s.steps_total || 5000, step = s.step || 0;
     setText('step', int(step)); setText('total', int(total));
+    const p0 = s.p0 || {};
+    if (isFinite(p0.hours)) {
+      setText('run-sub', `Qwen3-0.6B + depth · ${Number(p0.hours).toFixed(1)} h Open Yap`);
+    }
     setText('phase', (!s.process ? (s.p0 && s.p0.done < s.p0.target ? 'tokenizing' : 'waiting') : (step ? 'training' : 'starting')));
     setText('epoch', fmt(s.epochs, 2));
     setText('accum', s.accum || 2);

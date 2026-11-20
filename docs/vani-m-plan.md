@@ -277,6 +277,22 @@ queues one token per frame with PADs and needs no word timing. Next: dense P1
 data (speech-only turns or read/aligned speech), then 100 h, then a backbone
 change. Do not run another text-timing variant first.
 
+**P1 100 h run (2026-11-19).** `vani/run_p1_100h.sh` built 104 new conversations
+(101.23 h total, 149 conversations) and trained 5,000 steps on it: sparse text,
+cb0–1 only, dense windows (`min_voiced 0.7`), resumed from `p1_textslot2k`. Voiced
+cb0 rose **10.59% → 14.32%**, but cb1 fell **7.88% → 2.11%**. The sparse-text
+ablation is stronger: the word changes cb0 on 43.0% of word frames (KL 0.191) and
+real-word accuracy is 12.7% vs PAD 10.5% on word+voiced. Data scale helps cb0; cb1
+regressed on the old-holdout speaker. Likely causes: the old 45 are only ~30% of
+the 100 h (old-speaker forgetting) and the fine codebooks were frozen from the
+the 29.6 h model. A fresh unseen conversation (`conv_70cb754c9722`, not in the
+149) confirms both: voiced cb0 **12.24%**, cb1 **2.37%**; `textforced` WER 0.932;
+`gt0_1` WER **0.890** (the old holdout was 0.353); `gt_all` 0.110. The codec
+ceiling is excellent; the **frozen fine codebooks do not generalize** to the new
+speakers, and cb1 is broken on both domains. Next: unlock cb2–7 on the 100 h data
+(all-8 fine-tune) and address cb1; gate both holdouts. Do not add more data blindly.
+Checkpoint: `checkpoints/p1_100h/last.pt`.
+
 The codebook-swap ablation localises the failure to coarse content:
 
 | variant | cb0–1 | cb2–7 | WER |

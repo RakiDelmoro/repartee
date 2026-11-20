@@ -22,13 +22,14 @@ Vani-M is the local, trainable, full-duplex mouth:
 Current status: **P1 alignment, gate failed.** The gate isolates the failure: with
 true coarse codes the model reaches WER 0.353 (codec ceiling 0.279); with generated
 coarse codes it is 0.971. The codec and fine codebooks are good; coarse content
-(cb0–1) is the blocker. Token + cb0–1-first reached voiced cb0 **10.59%**; the
-held-word run reached **11.82%**, with real-vs-PAD accuracy still within ~1 point.
-Text timing/alignment is not the main limiter. Held-word is a **probe**, not the
-product path: it needs word-duration pacing at runtime. The deployable line is the
-per-frame sparse text token (cb0 10.59%). Next: dense P1 data (speech-only turns
-or read/aligned speech), then 100 h, then a backbone change. Listenable WAVs are
-in `data/vani_p1_gate/`.
+(cb0–1) is the blocker. The deployable sparse text path reached cb0 **10.59%**;
+held-word was a probe (11.82%) and is not used. The 100 h Open Yap run (149
+conversations, dense windows) moved cb0 to **14.32%** but cb1 fell to **2.11%**.
+A fresh unseen conversation confirms cb0 **12.24%**, cb1 **2.37%**, and
+`gt0_1` WER **0.890** (old holdout 0.353) while `gt_all` is 0.110. The codec is
+fine; the frozen fine codebooks do not generalize, and cb1 is broken on both
+domains. Next: all-8 fine-tune on the 100 h data, then cb1. New-domain WAVs are in
+`data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
 
 Full plan and gates: [`docs/vani-m-plan.md`](docs/vani-m-plan.md).
 
