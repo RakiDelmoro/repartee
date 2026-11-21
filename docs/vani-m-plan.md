@@ -433,14 +433,20 @@ path (Mimi, 17 streams); 1,000 h is narrow and English-only; no guarantee.
 
 - `app/`, `docs/`, `tests/` retained.
 - `vani/` holds the Moshi-style model, training, generation, and evaluation code.
-- Deployable checkpoint: `checkpoints/p1_textslot2k/last.pt` (per-frame sparse
-  text token, cb0 10.59%) plus its `eval.json` and `text_ablation.json`.
+- Best P1 base: `checkpoints/p1_100h/last.pt` (100 h Open Yap coarse, sparse
+  text; voiced cb0 14.32% old / 12.24% new; still fails the gate) plus its
+  `eval.json`/logs. The 29.6 h `p1_textslot2k` base and the failed all-8,
+  cb1-weighted, and fine-only checkpoints were deleted on 2026-11-21.
 - Baseline evidence: `checkpoints/p1_text29h/eval.json`/`train.log`,
   `checkpoints/p1_28h/{eval,eval_old}.json`/`run.json`/`train.log`, and the
   `p1_coarse_sc*/train.log` diagnostics.
-- `data/vani_p0_45`: grids and `.rms.npy` voice-activity sidecars. The held-word
-  `.word.npy` sidecars were deleted (probe only); `vani/build_word_cond.py` can
-  rebuild them.
-- `data/vani_p1_gate`: validation WAVs, ASR, metrics, `reference.txt`.
-- Failed-run and probe checkpoints were deleted on 2026-11-19.
+- `data/vani_p0_100h` (101.2 h, 149 conversations) and `data/vani_p0_45`
+  (original 45); grids and `.rms.npy` sidecars. The held-word `.word.npy`
+  sidecars and `build_word_cond.py` were removed when the probe closed.
+- `data/vani_p1_gate*`/`vani_p1_newhold*`: validation WAVs, ASR, metrics,
+  references. `data/libritts_r/train_clean_100.tar.gz` is a 1.3 GB partial
+  LibriTTS-R download, paused for the read-speech pivot.
+- Dead P1 scripts (`deep_audio_eval.py`, `eval_coarse_sc.sh`, `eval_after_5k.sh`,
+  `make_p1_wav.sh`, `run_p1_5ep.sh`, `run_p1_28h.sh`, `run_p1_text29h.sh`) were
+  removed on 2026-11-21.
 - `models/`, `data/`, `checkpoints/` are local artifacts and are gitignored.
