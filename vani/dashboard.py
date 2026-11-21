@@ -19,8 +19,8 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(__file__).resolve().parent / "web"
 CHECKPOINTS = ROOT / "checkpoints"
-P0 = ROOT / "data" / "vani_p0_100h"
-P0_TARGET = 149
+P0 = ROOT / "data" / "vani_p0_libritts"
+P0_TARGET = 250
 DEFAULT_STEPS = 5000
 DEFAULT_ACCUM = 2
 DEFAULT_WINDOW = 192
