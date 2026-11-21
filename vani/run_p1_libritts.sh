@@ -2,13 +2,15 @@
 set -u
 cd "$(dirname "$0")/.."
 mkdir -p data/libritts_r data/vani_p0_libritts checkpoints/p1_libritts
-curl -L -C - --retry 5 --retry-delay 5 \
-  -o data/libritts_r/train_clean_100.tar.gz \
-  https://openslr.trmal.net/resources/141/train_clean_100.tar.gz
-curl -L -o data/libritts_r/md5sum.txt \
-  https://openslr.trmal.net/resources/141/md5sum.txt
-(cd data/libritts_r && grep train_clean_100 md5sum.txt | md5sum -c -)
-tar -xzf data/libritts_r/train_clean_100.tar.gz -C data/libritts_r
+if [ ! -d data/libritts_r/LibriTTS_R/train-clean-100 ]; then
+  curl -L -C - --retry 5 --retry-delay 5 \
+    -o data/libritts_r/train_clean_100.tar.gz \
+    https://openslr.trmal.net/resources/141/train_clean_100.tar.gz
+  curl -L -o data/libritts_r/md5sum.txt \
+    https://openslr.trmal.net/resources/141/md5sum.txt
+  (cd data/libritts_r && grep train_clean_100 md5sum.txt | md5sum -c -)
+  tar -xzf data/libritts_r/train_clean_100.tar.gz -C data/libritts_r
+fi
 .venv/bin/python -u -m vani.build_libritts \
   --root data/libritts_r --out data/vani_p0_libritts \
   2>&1 | tee data/vani_p0_libritts/build.log

@@ -21,7 +21,8 @@ from .data.mimi import CODEBOOKS, SAMPLE_RATE, encode_chunks, load_mimi
 
 TEXT_PAD = 151_643
 FRAME_SAMPLES = 1_920
-GAP = np.zeros(int(0.1 * SAMPLE_RATE), dtype=np.float32)
+GAP = np.zeros(FRAME_SAMPLES, dtype=np.float32)
+GAP_FRAMES = len(GAP) // FRAME_SAMPLES
 
 
 def align_text(tokenizer, text: str, start: int, frames: int, out: np.ndarray) -> int:
@@ -80,11 +81,11 @@ def main() -> None:
                 x = x.mean(axis=1)
             assert sr == SAMPLE_RATE, f"{wav}: {sr}"
             frames = len(x) // FRAME_SAMPLES
-            text = np.pad(text, (0, frames), constant_values=TEXT_PAD)
+            text = np.pad(text, (0, frames + GAP_FRAMES), constant_values=TEXT_PAD)
             align_text(tokenizer, txt_path.read_text().strip(), cursor, frames, text)
             audio_parts.append(x)
             audio_parts.append(GAP)
-            cursor += frames + len(GAP) // FRAME_SAMPLES
+            cursor += frames + GAP_FRAMES
         if not audio_parts:
             continue
         audio = np.concatenate(audio_parts)
