@@ -33,8 +33,9 @@ domains. A 5,000-step all-8 fine-tune **regressed both halves** (old cb0/cb1
 and fine-only phases also failed (cb1 stayed ~2%; fine-only `gt0_1` 0.849 new,
 coarse collapsed). The **0.73 B / 100 h Open Yap P1 recipe is exhausted**;
 `p1_100h` remains the best base but fails the gate. Next: dense read/aligned P1
-speech, a larger/audio-pretrained backbone, or the product cascade. New-domain
-WAVs are in `data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
+speech — LibriTTS-R `train-clean-100` (100 h, 24 kHz) is downloading — then a
+larger/audio-pretrained backbone or the product cascade. New-domain WAVs are in
+`data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
 
 Full plan and gates: [`docs/vani-m-plan.md`](docs/vani-m-plan.md).
 

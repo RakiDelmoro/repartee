@@ -3,9 +3,9 @@
 Status: **P0 passed. P1 remains open. The 0.73 B / 100 h Open Yap recipe is
 exhausted: cb1 stayed ~2%, the all-8 and cb1-weighted runs did not fix it, and
 the fine-only phase did not adapt cb2–7 (`gt0_1` 0.849 new). Next: dense
-read/aligned P1 speech, a larger/audio-pretrained backbone, or the product
-cascade. P2 and P3 remain blocked.** This is a new small model, not a patch to
-Vani-4B/Haru.
+read/aligned P1 speech (LibriTTS-R train-clean-100, started), a larger/
+audio-pretrained backbone, or the product cascade. P2 and P3 remain blocked.**
+This is a new small model, not a patch to Vani-4B/Haru.
 
 ## What we want
 
@@ -321,6 +321,13 @@ pass.** `p1_100h` remains the best base (14.32/2.11 old, 12.24/2.37 new) but sti
 fails the gate. Next: dense read/aligned P1 speech (the plan's fallback), a
 larger/audio-pretrained backbone, or the product cascade. No more 0.73 B / 100 h
 Open Yap tuning.
+
+**P1 pivot (2026-11-21).** Dense read/aligned P1 speech: LibriTTS-R
+`train-clean-100` (100 h, 24 kHz, 8.1 GB compressed), downloaded to
+`data/libritts_r/`. The same 0.73 B model on the local 8 GB card; 17-stream grid
+with the 8 user streams zero; utterance-level text aligned to 80 ms frames; P1
+alignment on dense read speech. P2 stays Open Yap. This tests whether the failure
+is the sparse conversational data/domain rather than the model size.
 
 The codebook-swap ablation localises the failure to coarse content:
 
