@@ -17,10 +17,14 @@ checkpoints/
 *.wav
 *.flac
 
+# separate Vani repository (not part of repartee)
+/vani/
+
 # local/runtime
 __pycache__/
 *.pyc
 .venv/
+.venv-duplex/
 .pytest_cache/
 speaker_a.flac
 *.mp4

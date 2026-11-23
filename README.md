@@ -7,52 +7,32 @@ Local speech software for room recording and full-duplex speech research.
 | track | code | state |
 |---|---|---|
 | Room-recorder ingest | `app/` | ingest, ASR, summary, knowledge-base UI built and tested; device firmware not started |
-| Vani-M speech model | `vani/` | 730M local Qwen3 + depth model; P0 codec check passed; P1 alignment in progress |
+| Full-duplex voice | [`RakiDelmoro/vani`](https://github.com/RakiDelmoro/vani) | separate repository: offline cascade replay, Laya timing, workspace-aware LLM; live loop not built |
 
-## Vani-M
+## Full-duplex voice
 
-Vani-M is the local, trainable, full-duplex mouth:
+The active duplex design is a VAD-free ASR–LLM–TTS cascade, not a new speech model.
+A streaming recognizer emits words every 300–600 ms; a small timing policy decides
+`listen`, `speak`, backchannel, or interrupt; an asynchronous text LLM supplies the
+words; and a streaming TTS speaks them. Typed control tokens carry the conversation
+state, and real Open Yap conversations supply the timing data.
 
-- Qwen3-0.6B temporal backbone
-- 12-layer depth transformer
-- Mimi codec, frozen, 12.5 Hz, 8 codebooks
-- 17 streams per 80 ms frame: agent text, 8 agent audio codes, 8 user audio codes
-- P1 trains the agent mouth only; P2 adds duplex; P3 adds text injection
+Current stack: Kyutai STT 1B + Laya timing policy on the 8 GB GPU, with
+Qwen3-4B-Instruct-2507 on CPU for content and ZONOS3-Mini or Piper on CPU for TTS.
+The Qwen3-0.6B timing LoRA remains an experiment. All duplex research work lives in
+the separate repository [`RakiDelmoro/vani`](https://github.com/RakiDelmoro/vani):
+code, docs, tests, data, checkpoints, samples, models, and vendor tools.
 
-Current status: **P1 alignment, gate failed.** The gate isolates the failure: with
-true coarse codes the model reaches WER 0.353 (codec ceiling 0.279); with generated
-coarse codes it is 0.971. The codec and fine codebooks are good; coarse content
-(cb0–1) is the blocker. The deployable sparse text path reached cb0 **10.59%**;
-held-word was a probe (11.82%) and is not used. The 100 h Open Yap run (149
-conversations, dense windows) moved cb0 to **14.32%** but cb1 fell to **2.11%**.
-A fresh unseen conversation confirms cb0 **12.24%**, cb1 **2.37%**, and
-`gt0_1` WER **0.890** (old holdout 0.353) while `gt_all` is 0.110. The codec is
-fine; the frozen fine codebooks do not generalize, and cb1 is broken on both
-domains. A 5,000-step all-8 fine-tune **regressed both halves** (old cb0/cb1
-13.08/1.82, new 10.82/2.08; new `gt0_1` 0.986), and the timeboxed cb1-weighted
-and fine-only phases also failed (cb1 stayed ~2%; fine-only `gt0_1` 0.849 new,
-coarse collapsed). The **0.73 B / 100 h Open Yap P1 recipe is exhausted**;
-`p1_100h` remains the best base but fails the gate. Next: dense read/aligned P1
-speech — LibriTTS-R `train-clean-100` (100 h, 24 kHz) is downloading — then a
-larger/audio-pretrained backbone or the product cascade. New-domain WAVs are in
-`data/vani_p1_newhold/`; old gate WAVs in `data/vani_p1_gate/`.
+Status: **offline replay built, live loop not built.** The Vani repository's
+`replay.py` runs the cascade over Open Yap audio with a rule policy; `replay_laya.py`
+runs the trained user-state Laya policy, schedules backchannels at real word gaps, and
+gives the content LLM a live duplex-workspace snapshot. The first real-time deliverable
+is still the standalone loop (`mic -> ASR -> policy -> content -> TTS -> speaker`), not
+production integration. The retired native speech-model code, checkpoints, and
+archives have been removed from this repository.
 
-Full plan and gates: [`docs/vani-m-plan.md`](docs/vani-m-plan.md).
-
-## Training dashboard
-
-```bash
-.venv/bin/uvicorn vani.dashboard:app --host 0.0.0.0 --port 8765
-```
-
-Open <http://127.0.0.1:8765>. It shows loss curves, per-codebook CE, progress,
-GPU/CPU/RAM, dataset tokenization, checkpoints, and the live log.
-
-Training log:
-
-```text
-checkpoints/p1_28h/train.log
-```
+Design, data, gates, build order, and code:
+[`RakiDelmoro/vani`](https://github.com/RakiDelmoro/vani).
 
 ## Room recorder
 
@@ -69,8 +49,7 @@ Start at [`docs/README.md`](docs/README.md).
 
 ```bash
 .venv/bin/pip install -e .
-.venv/bin/pytest
+.venv/bin/python -m pytest
 ```
 
-Dataset, model weights, checkpoints, and generated audio are not tracked; see
-`.gitignore`.
+Dataset, model weights, and generated audio are not tracked; see `.gitignore`.

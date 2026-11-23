@@ -72,10 +72,9 @@ Design constraints this puts on stage 1, cheap to respect now:
 
 - realtime responses from a medium-power device (Jetson class);
 - space-filling speech so the conversation feels fluid while the bigger model thinks;
-- smooth handover between the small speech-to-speech model and the big model answer;
-  a released model now targets this directly: Haru-4B is native duplex at 133 ms and
-  takes text on its per-frame text stream, so the answer is injected, not handed over
-  between turns (`archive/vani-injection.md`);
+- smooth handover between the voice path and the big model answer; the active design is
+  a VAD-free ASR–LLM–TTS micro-turn cascade (separate `RakiDelmoro/vani` repo), where the text
+  answer is injectable at every 300–600 ms tick, not handed over between turns;
 - most conversational work on the medium device; the big model is invoked only when
   the small model judges the task hard;
 - good emotional awareness and empathy.
