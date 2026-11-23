@@ -43,7 +43,8 @@ stores conversations.
 
 ## Docs
 
-Start at [`docs/README.md`](docs/README.md).
+Start at [`docs/README.md`](docs/README.md). Repository and remote map for local
+agents: [`AGENTS.md`](AGENTS.md).
 
 ## Development
 
