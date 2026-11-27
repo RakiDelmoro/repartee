@@ -1,24 +1,11 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
 {
-	"name": "Repartee Development Container",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/base:resolute",
+    "name": "Repartee Development Container",
+    "build": { "dockerfile": "Dockerfile" },
+    "runArgs": ["--gpus=all"],
 
-	"runArgs": ["--gpus=all"],
+    // omp writes auth, config (agent/config.yml) and sessions to ~/.omp.
+    // A named volume keeps them across rebuilds; avoids Windows bind-mount slowness.
+    "mounts": ["source=omp-home,target=/root/.omp,type=volume"],
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
-
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "uname -a",
-
-	// Configure tool-specific properties.
-	// "customizations": {},
-
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	"remoteUser": "root"
+    "remoteUser": "root"
 }
