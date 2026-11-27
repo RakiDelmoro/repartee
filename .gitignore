@@ -23,6 +23,7 @@ checkpoints/
 # local/runtime
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
 .venv-duplex/
 .pytest_cache/

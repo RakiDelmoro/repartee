@@ -1,19 +1,13 @@
 [project]
-name = "repartee-ingest"
+name = "repartee-receiver"
 version = "0.1.0"
-description = "Ingest, transcribe, summarise and index room-recorder conversations"
+description = "USB CDC receiver for the ESP32 conversation recorder"
 requires-python = ">=3.11"
-dependencies = [
-    "fastapi>=0.115",
-    "uvicorn>=0.30",
-    "transformers>=5.13",
-    "torch>=2.6",
-    "soundfile>=0.12",
-    "numpy>=2.0",
-    "scipy>=1.11",
-    "psutil>=5.9",
-    "bitsandbytes>=0.45",
-]
+dependencies = []
+
+[project.optional-dependencies]
+# Windows needs pyserial; Linux drives the raw tty directly.
+receiver = ["pyserial>=3.5"]
 
 [project.scripts]
 repartee = "app.__main__:main"

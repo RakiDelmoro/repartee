@@ -1,3 +1,3 @@
-"""Big-computer side of the room recorder: ingest and transcribe."""
+"""USB CDC receiver for the ESP32 conversation recorder."""
 
-__all__ = ["config", "db", "asr", "pipeline", "server"]
+__all__ = ["config", "receiver"]

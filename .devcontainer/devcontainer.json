@@ -1,7 +1,14 @@
 {
     "name": "Repartee Development Container",
     "build": { "dockerfile": "Dockerfile" },
-    "runArgs": ["--gpus=all"],
+    "runArgs": [
+        "--gpus=all",
+        // XIAO USB CDC console. The node must exist on the Docker host at
+        // container create: on Docker Desktop for Windows attach it with
+        // `usbipd attach --wsl --busid <id>`; a native COM port is not visible
+        // to the Linux container.
+        "--device=/dev/ttyACM0:/dev/ttyACM0"
+    ],
 
     // omp writes auth, config (agent/config.yml) and sessions to ~/.omp.
     // A named volume keeps them across rebuilds; avoids Windows bind-mount slowness.

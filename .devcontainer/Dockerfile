@@ -2,6 +2,15 @@ FROM mcr.microsoft.com/devcontainers/base:resolute
 
 USER root
 
+# Repartee needs a Python toolchain; the base image ships none. Repartee itself is
+# installed inside the container (README step 3): an editable install needs the
+# workspace, which does not exist at image build time.
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        python3 python3-venv python3-pip; \
+    rm -rf /var/lib/apt/lists/*
+
 # Bump to upgrade. Changing this ARG invalidates the omp layer and nothing above it.
 ARG OMP_VERSION=v19.2.0
 
