@@ -35,34 +35,35 @@ after every replug.
 ```bash
 cd /workspaces/repartee
 
-# One-time install (already present in this container).
-.venv/bin/pip install -e '.[bigger]'
+# One time: venv, Python packages, model in models/LFM3-Omni-2B.
+./scripts/setup.sh
 
-nohup env REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
-  scripts/supervise.sh > data/supervise.log 2>&1 &
+# Every time you want the recorder + worker running.
+./scripts/start.sh
 ```
 
 Check:
 
 ```bash
-pgrep -af 'repartee (receiver|worker)'
-tail -f data/worker.log
+./scripts/status.sh
 ```
 
 Stop:
 
 ```bash
-pkill -TERM -f scripts/supervise.sh
+./scripts/stop.sh
 ```
 
-This survives closing the terminal. It does **not** survive the container
-stopping. The supervisor restarts either child after 5 s.
+`setup.sh` copies the checkpoint from `/root/.cache/repartee/LFM3-Omni-2B`
+when present, otherwise downloads it. It ends up in the workspace at
+`models/LFM3-Omni-2B`, which is gitignored but visible in the file explorer.
 
-The model path above is inside this container. Host systemd or Docker needs a
-host-visible copy of the checkpoint; copy it and set `REPARTEE_STT_MODEL` or
-`REPARTEE_MODEL_DIR` accordingly.
+`start.sh` runs the supervisor in the background. It survives closing the
+terminal, but not the container stopping. The supervisor restarts either child
+after 5 s.
 
-If you are not in this container, use the systemd or Docker steps below.
+Host systemd or Docker needs its own host-visible model copy; see below.
+If you are not in this container, use the systemd or Docker steps.
 
 ## Run on Ubuntu/WSL with systemd
 
@@ -169,14 +170,14 @@ visible to the host. If your Compose rejects the GPU reservation, replace the
 Process one file:
 
 ```bash
-REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+REPARTEE_STT_MODEL="$PWD/models/LFM3-Omni-2B" \
   .venv/bin/repartee process data/recordings/20261128-101500-rep01.wav
 ```
 
 Transcribe only:
 
 ```bash
-REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+REPARTEE_STT_MODEL="$PWD/models/LFM3-Omni-2B" \
   .venv/bin/repartee transcribe data/recordings/20261128-101500-rep01.wav --json
 ```
 
@@ -189,7 +190,7 @@ Query the folder:
 ```
 
 `show` takes the id without `.wav`. Use `--knowledge-base PATH` for another
-folder. The model path above is the one in this container; change it on a host.
+folder. The model path above is the workspace copy made by `setup.sh`.
 
 ## Paths
 
@@ -199,6 +200,9 @@ folder. The model path above is the one in this container; change it on a host.
 | `data/recordings/<id>.wav.done` | complete; the worker claims only these |
 | `data/recordings/<id>.wav.error` | failed job; retry with `process --force` |
 | `knowledge-base/YYYY-MM-DD/<id>.md` | summary + transcript + metadata |
+| `models/LFM3-Omni-2B` | local checkpoint used by the dev scripts |
+| `scripts/setup.sh` | install deps + copy/download the model |
+| `scripts/start.sh` / `stop.sh` / `status.sh` | dev quick start |
 | `scripts/supervise.sh` | dev supervisor for receiver + worker |
 | `deploy/systemd/` | systemd units and env example |
 | `compose.yaml` / `Dockerfile` | two-service Docker stack |
