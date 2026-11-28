@@ -138,6 +138,8 @@ mkdir -p data knowledge-base models
 
 # Host-visible copy of the checkpoint.
 cp -a /path/to/LFM3-Omni-2B models/
+
+# $PWD is the repo directory from the cd above; Compose needs an absolute path.
 export REPARTEE_MODEL_DIR="$PWD/models/LFM3-Omni-2B"
 ```
 
