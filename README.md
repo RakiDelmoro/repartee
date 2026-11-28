@@ -176,6 +176,30 @@ REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B .venv/bin/repartee worker 
 .venv/bin/repartee show 20261128-101500-rep01
 ```
 
+### Autonomous operation
+
+The receiver and the worker are two processes. The receiver does **not** spawn
+the worker. Start both once and no human step is needed per recording:
+
+```bash
+mkdir -p data
+nohup .venv/bin/repartee receiver > data/receiver.log 2>&1 &
+nohup env REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+  .venv/bin/repartee worker > data/worker.log 2>&1 &
+```
+
+The handshake is the `.done` sidecar:
+
+1. Receiver gets END, fixes the RIFF sizes, closes the WAV, writes `.wav.done`.
+2. Worker polls `data/recordings` every 2 s and claims only `.wav.done` files.
+3. Worker runs STT, then summary, then atomically writes the Markdown entry.
+4. Existing ids are skipped; `.error` files are quarantined until
+   `process --force`; a worker restart catches up on everything still pending.
+
+With only the receiver running, WAVs accumulate and nothing is transcribed. With
+both running, the flow is autonomous. The worker keeps the model loaded after
+the first job; the first job pays the cold start.
+
 Layout:
 
 ```text
