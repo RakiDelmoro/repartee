@@ -200,6 +200,31 @@ With only the receiver running, WAVs accumulate and nothing is transcribed. With
 both running, the flow is autonomous. The worker keeps the model loaded after
 the first job; the first job pays the cold start.
 
+#### Keeping the processes up
+
+`nohup ... &` survives closing the terminal, not a crash, OOM, `Ctrl-C`, or a
+container/reboot. The worker is an ordinary foreground process; nothing starts
+or restarts it for you. For development, use the small supervisor:
+
+```bash
+nohup scripts/supervise.sh > data/supervise.log 2>&1 &
+```
+
+It starts both children and restarts either one after 5 s if it exits. It uses
+`data/receiver.log` and `data/worker.log`. It does **not** survive a container
+stop or a machine reboot. This container has no systemd (`systemctl` is a stub);
+on a real Linux host use a systemd unit with `Restart=always`, or run the
+container with a restart policy and a process manager inside it.
+
+The worker being down is normal and recoverable: every `.done` file stays on
+disk, and a restart drains the backlog. It is not loss-free if the disk fills or
+someone deletes the recordings. Check with:
+
+```bash
+pgrep -af 'repartee (receiver|worker)'
+tail -f data/worker.log
+```
+
 Layout:
 
 ```text
