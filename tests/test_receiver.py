@@ -197,6 +197,7 @@ class SerialTests(unittest.IsolatedAsyncioTestCase):
         assert head[:4] == b"RIFF" and head[8:12] == b"WAVE"
         assert files[0].stat().st_size > 44
         assert not list(self.out.glob("*.part"))
+        assert not (files[0].with_name(files[0].name + ".done")).exists()
 
         self.send(srv.TYPE_END, srv.END.pack(sid, 16000, 0, 0))
         assert await self.read_ack() == (sid, 16000, srv.FINAL_ACK_FLAG)
@@ -204,6 +205,7 @@ class SerialTests(unittest.IsolatedAsyncioTestCase):
         files = self.recordings()
         assert len(files) == 1
         assert files[0].name.endswith("-TESTDEVICE.wav")
+        assert (files[0].with_name(files[0].name + ".done")).exists()
         assert list(self.out.glob("*.part")) == []
         with wave.open(str(files[0]), "rb") as wf:
             assert wf.getnframes() == 16000

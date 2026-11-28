@@ -1,3 +1,3 @@
-"""USB CDC receiver for the ESP32 conversation recorder, plus bigger-device STT."""
+"""Conversation recorder: USB receiver, STT, and the bigger-device pipeline."""
 
-__all__ = ["config", "receiver", "stt"]
+__all__ = ["config", "conversations", "pipeline", "receiver", "stt"]

@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -34,6 +35,11 @@ SAMPLE_RATE = 16_000
 FRAME_SECONDS = 0.03
 PAUSE_SECONDS = 0.25
 MIN_CHUNK_SECONDS = 0.5
+MAX_SUMMARY_CHARS = 6000
+SUMMARY_PROMPT = (
+    "Summarize the conversation in three sentences. Do not explain your "
+    "reasoning. Output only the summary."
+)
 
 
 @dataclass(frozen=True)
@@ -203,9 +209,37 @@ class OmniTranscriber:
         self._model.eval()
         log.info("model ready on %s", self._model.device)
 
+    def _generate(self, messages: list[dict], max_new_tokens: int) -> str:
+        import torch
+
+        self._load()
+        inputs = self._processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self._model.device)
+        with torch.inference_mode():
+            output = self._model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                generation_mode="text",
+            )
+        seq = output.sequences if hasattr(output, "sequences") else output
+        end = (
+            int(output.sequence_lengths[0])
+            if hasattr(output, "sequence_lengths")
+            else seq.shape[1]
+        )
+        text = self._processor.decode(
+            seq[0, inputs["input_ids"].shape[1] : end],
+            skip_special_tokens=True,
+        )
+        return clean_text(text)
+
     def _transcribe_chunk(self, wav: "np.ndarray", depth: int = 0) -> str:
         import soundfile as sf
-        import torch
 
         self._load()
         fd, name = tempfile.mkstemp(suffix=".wav", prefix="repartee-")
@@ -217,30 +251,7 @@ class OmniTranscriber:
                 {"role": "system", "content": f"Perform ASR in {self.language}."},
                 {"role": "user", "content": [{"type": "audio", "audio": str(tmp)}]},
             ]
-            inputs = self._processor.apply_chat_template(
-                conversation,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-            ).to(self._model.device)
-            with torch.inference_mode():
-                output = self._model.generate(
-                    **inputs,
-                    max_new_tokens=self.max_new_tokens,
-                    generation_mode="text",
-                )
-            seq = output.sequences if hasattr(output, "sequences") else output
-            end = (
-                int(output.sequence_lengths[0])
-                if hasattr(output, "sequence_lengths")
-                else seq.shape[1]
-            )
-            text = self._processor.decode(
-                seq[0, inputs["input_ids"].shape[1] : end],
-                skip_special_tokens=True,
-            )
-            text = clean_text(text)
+            text = self._generate(conversation, self.max_new_tokens)
         finally:
             tmp.unlink(missing_ok=True)
 
@@ -278,6 +289,37 @@ class OmniTranscriber:
             chunks=tuple(chunks),
             model=self.model_id,
             elapsed_s=time.monotonic() - started,
+        )
+
+    # ---------- summary ----------
+    def summarize(self, text: str) -> str:
+        """Three-sentence prose summary, reusing the loaded model."""
+        text = text.strip()
+        if not text:
+            return ""
+        if len(text) <= MAX_SUMMARY_CHARS:
+            return self._summary_once(text)
+
+        # Long transcript: summarize sentence-aligned chunks, then the summaries.
+        parts: list[str] = []
+        buf = ""
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            if len(buf) + len(sentence) + 1 > MAX_SUMMARY_CHARS and buf:
+                parts.append(buf)
+                buf = ""
+            buf = f"{buf} {sentence}".strip()
+        if buf:
+            parts.append(buf)
+        partials = [part for part in (self._summary_once(p) for p in parts) if part]
+        return self._summary_once(" ".join(partials)) if partials else ""
+
+    def _summary_once(self, text: str) -> str:
+        return self._generate(
+            [
+                {"role": "system", "content": SUMMARY_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            max_new_tokens=400,
         )
 
 

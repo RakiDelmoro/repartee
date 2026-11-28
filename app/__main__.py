@@ -1,4 +1,4 @@
-"""Command line entry point: the USB receiver and bigger-device transcription."""
+"""Command line entry point: receiver, transcription, pipeline, and history."""
 
 from __future__ import annotations
 
@@ -12,6 +12,16 @@ def main(argv: list[str] | None = None) -> int:
         from . import stt
 
         return stt.main(argv[1:])
+
+    if argv and argv[0] in {"process", "worker"}:
+        from . import pipeline
+
+        return pipeline.main(argv)
+
+    if argv and argv[0] in {"search", "conversations", "show"}:
+        from . import conversations
+
+        return conversations.main(argv)
 
     from . import receiver
 

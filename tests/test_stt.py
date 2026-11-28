@@ -67,3 +67,21 @@ def test_clean_text_drops_empty_think_block():
     assert stt.clean_text("<think></think> Hello there. ") == "Hello there."
     assert stt.clean_text("<think>still open") == ""
     assert stt.clean_text("plain") == "plain"
+
+
+def test_summarize_splits_long_transcript_and_merges(monkeypatch):
+    transcriber = stt.OmniTranscriber(model_id="fake")
+    calls: list[str] = []
+
+    def fake_summary(text: str) -> str:
+        calls.append(text)
+        return f"summary-{len(calls)}"
+
+    monkeypatch.setattr(transcriber, "_summary_once", fake_summary)
+    text = "This is one sentence. " * 1000
+
+    result = transcriber.summarize(text)
+
+    assert len(calls) >= 2
+    assert all(len(call) <= stt.MAX_SUMMARY_CHARS for call in calls[:-1])
+    assert result == f"summary-{len(calls)}"

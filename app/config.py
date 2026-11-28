@@ -22,6 +22,13 @@ STT_DEVICE = os.environ.get("REPARTEE_STT_DEVICE", "auto")
 STT_CHUNK_SECONDS = float(os.environ.get("REPARTEE_STT_CHUNK_SECONDS", "60"))
 STT_MAX_NEW_TOKENS = int(os.environ.get("REPARTEE_STT_MAX_NEW_TOKENS", "1024"))
 
+# Bigger device: transcript -> summary -> SQLite knowledge base.
+DB_PATH = Path(os.environ.get("REPARTEE_DB", DATA_DIR / "repartee.db"))
+SUMMARY_ENABLED = os.environ.get("REPARTEE_SUMMARY", "1").lower() not in {
+    "0", "false", "no", "off",
+}
+WORKER_POLL_SECONDS = float(os.environ.get("REPARTEE_WORKER_POLL", "2"))
+
 
 def ensure_dirs() -> None:
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)

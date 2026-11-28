@@ -11,11 +11,22 @@ The 2.17 B model does **not** run on the ESP32: 4.3 GB of fp16 weights versus
 8 MB of PSRAM. The device keeps the low-power job — VAD and recording — and the
 bigger device runs the model.
 
+```mermaid
+flowchart LR
+  F[ESP32 firmware<br/>VAD + record] -->|USB CDC| R[receiver<br/>WAV + .done]
+  R --> W[worker<br/>LFM3-Omni STT]
+  W --> S[summary<br/>same model]
+  S --> DB[(SQLite<br/>conversations + FTS5)]
+```
+
 ## Storage
 
 | file | meaning |
 |---|---|
 | `data/recordings/YYYYMMDD-HHMMSS-<device>.wav` | one utterance |
+| `data/recordings/*.wav.done` | written after END fixes the WAV; the worker claims only these |
+| `data/recordings/*.wav.error` | failed job; the worker skips it until `process --force` |
+| `data/repartee.db` | transcripts, summaries, metadata, FTS5 index |
 
 The WAV appears at START and is playable while it grows: its RIFF/data sizes are
 refreshed every 5 s and fixed on END, so you can listen to a recording before the
@@ -123,6 +134,60 @@ two-speaker Open Yap 1K conversation (`conv_d4005da6db98`, start 75 s), 16 kHz
 mono, CC-BY-4.0. Its `.json` sidecar records the source and excerpt offset.
 `samples/` is gitignored; the sidecar is the provenance record.
 
+### Noise
+
+Same 60 s clip, real noise loops mixed at controlled SNR. WER is word-level
+**against the clean LFM3 transcript**, not ground truth; it measures degradation.
+
+| noise | SNR | WER vs clean |
+|---|---:|---:|
+| vacuum | 10 dB | 4 % |
+| vacuum | 5 dB | 7 % |
+| engine | 10 dB | 4 % |
+| engine | 5 dB | 5 % |
+| engine | 0 dB | 7 % |
+| rain | 10 dB | 14 % |
+| cafe/room ambience | 10 dB | 2 % |
+
+Steady vacuum/engine noise is tolerated; rain is the worst real noise tested.
+Noise-only input is **not** empty — the model emitted a short “Thank you.” So the
+device VAD must gate, and the pipeline should reject very short transcripts.
+
+## Summarization and conversation store
+
+```bash
+# One file, end to end. The model loads, transcribes, summarizes, upserts.
+REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+  .venv/bin/repartee process data/recordings/20261128-101500-rep01.wav
+
+# Long-lived worker: hold the model, poll data/recordings for *.wav.done.
+REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B .venv/bin/repartee worker
+REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B .venv/bin/repartee worker --once
+
+# Query the store.
+.venv/bin/repartee conversations
+.venv/bin/repartee search "visa paperwork"
+.venv/bin/repartee show 20261128-101500-rep01.wav
+```
+
+`process` pays the model's cold start; `worker` keeps the model loaded and is the
+production path (~10 s STT for 60 s audio after warmup, plus summary time). The
+summary is three sentences from the same loaded model. Transcripts over 6,000
+characters are summarized in sentence-aligned chunks and the summaries are
+summarized once more.
+
+Failure semantics: a failed summary keeps the transcript and stores status
+`transcribed`; an empty transcript, or any exception in the job, writes a
+`.error` sidecar and is left alone. Transcripts under three words are stored with
+status `short` and are not summarized — that is the guard for ASR noise
+hallucinations such as “Thank you.” The explicit `process --force` retries a
+quarantined file and replaces the row.
+
+The store is one SQLite table plus an FTS5 index over `transcript` and `summary`.
+Each row has id (the WAV name), device, start/end time, duration, language,
+transcript, summary, audio path/size, model, status and creation time. There is no
+web UI or HTTP ingest; the receiver and worker share the filesystem.
+
 ## Settings
 
 | variable | default | meaning |
@@ -135,9 +200,13 @@ mono, CC-BY-4.0. Its `.json` sidecar records the source and excerpt offset.
 | `REPARTEE_STT_DEVICE` | `auto` | `cuda`, `cpu`, or `auto` |
 | `REPARTEE_STT_CHUNK_SECONDS` | `60` | maximum audio per forward pass |
 | `REPARTEE_STT_MAX_NEW_TOKENS` | `1024` | generation cap per chunk |
+| `REPARTEE_DB` | `<data>/repartee.db` | SQLite conversation store |
+| `REPARTEE_SUMMARY` | `1` | set to `0` to store transcripts without summaries |
+| `REPARTEE_WORKER_POLL` | `2` | seconds between recording polls |
 
 `--serial` and `--out` override the receiver settings; `--model`,
 `--language`, `--chunk-seconds` and `--max-new-tokens` override the STT ones.
+`--db` selects another conversation store.
 
 ## Tests
 
@@ -150,11 +219,18 @@ python3 -m venv .venv
 The suite drives the protocol over a POSIX pty: ACKs, console-text resync,
 duplicate START, link-drop resume, and retry when the device is missing. The STT
 tests cover pause-aware chunking, the 60 s hard cut, downmix/resample, and
-`<think>` removal; they do not load the 4.3 GB model.
+`<think>` removal. The pipeline and store tests cover the `.done` contract,
+idempotence, summary fallback, error quarantine, SQLite upsert and FTS search;
+they use a fake transcriber and do not load the 4.3 GB model.
 
 With the model installed, run the end-to-end smoke:
 
 ```bash
 REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
   .venv/bin/repartee transcribe samples/open-yap-1k/conv_d4005da6db98-60s.wav
+
+cp samples/open-yap-1k/conv_d4005da6db98-60s.wav /tmp/smoke.wav
+REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+  .venv/bin/repartee process /tmp/smoke.wav --db /tmp/smoke.db
+.venv/bin/repartee search bank --db /tmp/smoke.db
 ```

@@ -234,6 +234,7 @@ class IngestServer:
         if session.finalized:
             return
         data_bytes = session.received * session.sample_bytes
+        written = False
         try:
             session.file.seek(0)
             session.file.write(
@@ -242,10 +243,20 @@ class IngestServer:
             session.file.flush()
             os.fsync(session.file.fileno())
             session.file.close()
+            written = True
         except OSError as exc:
             log.error("finalize %s failed: %s", session.path, exc)
         session.active = False
         session.finalized = True
+        if written:
+            # The bigger-device worker only claims recordings with this marker,
+            # so it never transcribes a file that is still growing.
+            try:
+                session.path.with_name(session.path.name + ".done").write_text(
+                    f"{time.time():.3f}\n"
+                )
+            except OSError as exc:
+                log.error("finalize marker %s failed: %s", session.path, exc)
         duration = session.received / session.rate if session.rate else 0.0
         log.info(
             "finalized %s (%.2f s, %d samples)",
