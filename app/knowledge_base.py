@@ -253,26 +253,32 @@ def _parser() -> argparse.ArgumentParser:
     search = sub.add_parser("search", help="search summaries and transcripts")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=20)
-    search.add_argument("--root", type=Path, default=config.KNOWLEDGE_BASE_DIR)
+    search.add_argument(
+        "--knowledge-base", type=Path, default=config.KNOWLEDGE_BASE_DIR
+    )
 
     listing = sub.add_parser("conversations", help="recent conversations")
     listing.add_argument("--limit", type=int, default=20)
-    listing.add_argument("--root", type=Path, default=config.KNOWLEDGE_BASE_DIR)
+    listing.add_argument(
+        "--knowledge-base", type=Path, default=config.KNOWLEDGE_BASE_DIR
+    )
 
     show = sub.add_parser("show", help="one conversation with its transcript")
     show.add_argument("session_id")
-    show.add_argument("--root", type=Path, default=config.KNOWLEDGE_BASE_DIR)
+    show.add_argument(
+        "--knowledge-base", type=Path, default=config.KNOWLEDGE_BASE_DIR
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "search":
-        rows = search(args.root, args.query, args.limit)
+        rows = search(args.knowledge_base, args.query, args.limit)
     elif args.command == "conversations":
-        rows = recent(args.root, args.limit)
+        rows = recent(args.knowledge_base, args.limit)
     else:
-        row = get(args.root, args.session_id)
+        row = get(args.knowledge_base, args.session_id)
         rows = row if row is not None else {"error": "not found", "id": args.session_id}
     print(json.dumps(rows, indent=2, ensure_ascii=False))
     return 0

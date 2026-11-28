@@ -10,6 +10,8 @@ dependencies = ["pyyaml>=6.0"]
 [project.optional-dependencies]
 # Windows needs pyserial; Linux drives the raw tty directly.
 receiver = ["pyserial>=3.5"]
+# Test-only helpers; no torch/model load.
+test = ["pytest>=8", "numpy>=2.0", "soundfile>=0.12", "librosa>=0.10"]
 # Bigger-device STT. The LFM3-Omni checkpoint ships custom modeling code, so
 # transformers must be new enough for AutoModelForMultimodalLM.
 bigger = [
