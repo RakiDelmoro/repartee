@@ -3,8 +3,10 @@
 USB CDC receiver for the ESP32 conversation recorder. It reads the firmware's
 START/AUDIO/END records from the board's USB serial console and writes one 16-bit
 PCM WAV per utterance into `data/recordings/`. The bigger-device stage then
-transcribes a finished WAV with [LFM3-Omni-2B](https://huggingface.co/LiquidAI/LFM3-Omni-2B).
-The firmware is unchanged (it lives in
+transcribes and summarizes a finished WAV with
+[LFM3-Omni-2B](https://huggingface.co/LiquidAI/LFM3-Omni-2B) and writes one
+Markdown entry per conversation into `knowledge-base/`. The firmware is
+unchanged (it lives in
 [`RakiDelmoro/conversation-recorder`](https://github.com/RakiDelmoro/conversation-recorder)).
 
 The 2.17 B model does **not** run on the ESP32: 4.3 GB of fp16 weights versus
@@ -15,8 +17,8 @@ bigger device runs the model.
 flowchart LR
   F[ESP32 firmware<br/>VAD + record] -->|USB CDC| R[receiver<br/>WAV + .done]
   R --> W[worker<br/>LFM3-Omni STT]
-  W --> S[summary<br/>same model]
-  S --> DB[(SQLite<br/>conversations + FTS5)]
+  W --> S[summary + entry<br/>same model]
+  S --> KB[(knowledge-base/<br/>YYYY-MM-DD/<id>.md)]
 ```
 
 ## Storage
@@ -26,7 +28,7 @@ flowchart LR
 | `data/recordings/YYYYMMDD-HHMMSS-<device>.wav` | one utterance |
 | `data/recordings/*.wav.done` | written after END fixes the WAV; the worker claims only these |
 | `data/recordings/*.wav.error` | failed job; the worker skips it until `process --force` |
-| `data/repartee.db` | transcripts, summaries, metadata, FTS5 index |
+| `knowledge-base/YYYY-MM-DD/<id>.md` | one conversation: YAML frontmatter + summary + transcript |
 
 The WAV appears at START and is playable while it grows: its RIFF/data sizes are
 refreshed every 5 s and fixed on END, so you can listen to a recording before the
@@ -153,10 +155,14 @@ Steady vacuum/engine noise is tolerated; rain is the worst real noise tested.
 Noise-only input is **not** empty — the model emitted a short “Thank you.” So the
 device VAD must gate, and the pipeline should reject very short transcripts.
 
-## Summarization and conversation store
+## Summarization and the knowledge-base folder
+
+LFM3 writes the summary; deterministic code owns the file path and the atomic
+write. A model error can produce a bad summary, but it cannot corrupt the folder
+or move a conversation.
 
 ```bash
-# One file, end to end. The model loads, transcribes, summarizes, upserts.
+# One file, end to end. The model loads, transcribes, summarizes, writes one .md.
 REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
   .venv/bin/repartee process data/recordings/20261128-101500-rep01.wav
 
@@ -164,29 +170,64 @@ REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
 REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B .venv/bin/repartee worker
 REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B .venv/bin/repartee worker --once
 
-# Query the store.
+# Query the folder. There is no database and no index; these walk the Markdown.
 .venv/bin/repartee conversations
 .venv/bin/repartee search "visa paperwork"
-.venv/bin/repartee show 20261128-101500-rep01.wav
+.venv/bin/repartee show 20261128-101500-rep01
 ```
+
+Layout:
+
+```text
+knowledge-base/
+├── README.md
+└── 2026-11-28/
+    └── 20261128-101500-rep01.md
+```
+
+The file is YAML frontmatter plus two sections:
+
+```markdown
+---
+schema: 1
+id: 20261128-101500-rep01
+device: rep01
+started_at: 2026-11-28T10:15:00
+duration_s: 60.0
+language: English
+model: LFM3-Omni-2B
+audio: data/recordings/20261128-101500-rep01.wav
+audio_bytes: 1920044
+status: summarized
+created_at: 2026-11-28T10:16:12+00:00
+---
+
+# Summary
+
+Three sentences from LFM3.
+
+# Transcript
+
+The verbatim ASR output.
+```
+
+Audio stays in `data/recordings/`; the KB stores its path. `knowledge-base/` is
+gitignored. The filename is the WAV stem, so `show` takes `20261128-101500-rep01`,
+not `.wav`. A complete file is the idempotence marker: the worker skips an
+existing id unless `process --force` is used. Writes go through a temp file and
+`os.replace`, so a crash leaves no half-written entry.
 
 `process` pays the model's cold start; `worker` keeps the model loaded and is the
 production path (~10 s STT for 60 s audio after warmup, plus summary time). The
-summary is three sentences from the same loaded model. Transcripts over 6,000
-characters are summarized in sentence-aligned chunks and the summaries are
-summarized once more.
+summary prompt asks for three sentences. Transcripts over 6,000 characters are
+summarized in sentence-aligned chunks and the summaries are summarized once more.
 
-Failure semantics: a failed summary keeps the transcript and stores status
+Failure semantics: a failed summary keeps the transcript and writes status
 `transcribed`; an empty transcript, or any exception in the job, writes a
-`.error` sidecar and is left alone. Transcripts under three words are stored with
-status `short` and are not summarized — that is the guard for ASR noise
-hallucinations such as “Thank you.” The explicit `process --force` retries a
-quarantined file and replaces the row.
-
-The store is one SQLite table plus an FTS5 index over `transcript` and `summary`.
-Each row has id (the WAV name), device, start/end time, duration, language,
-transcript, summary, audio path/size, model, status and creation time. There is no
-web UI or HTTP ingest; the receiver and worker share the filesystem.
+`.error` sidecar in `data/recordings` and is left alone. Transcripts under three
+words are written with status `short` and are not summarized — that is the guard
+for ASR noise hallucinations such as “Thank you.” The explicit `process --force`
+retries a quarantined file and replaces the entry.
 
 ## Settings
 
@@ -200,13 +241,13 @@ web UI or HTTP ingest; the receiver and worker share the filesystem.
 | `REPARTEE_STT_DEVICE` | `auto` | `cuda`, `cpu`, or `auto` |
 | `REPARTEE_STT_CHUNK_SECONDS` | `60` | maximum audio per forward pass |
 | `REPARTEE_STT_MAX_NEW_TOKENS` | `1024` | generation cap per chunk |
-| `REPARTEE_DB` | `<data>/repartee.db` | SQLite conversation store |
+| `REPARTEE_KNOWLEDGE_BASE` | `<cwd>/knowledge-base` | Markdown conversation folder |
 | `REPARTEE_SUMMARY` | `1` | set to `0` to store transcripts without summaries |
 | `REPARTEE_WORKER_POLL` | `2` | seconds between recording polls |
 
 `--serial` and `--out` override the receiver settings; `--model`,
 `--language`, `--chunk-seconds` and `--max-new-tokens` override the STT ones.
-`--db` selects another conversation store.
+`--knowledge-base` selects another folder.
 
 ## Tests
 
@@ -219,9 +260,9 @@ python3 -m venv .venv
 The suite drives the protocol over a POSIX pty: ACKs, console-text resync,
 duplicate START, link-drop resume, and retry when the device is missing. The STT
 tests cover pause-aware chunking, the 60 s hard cut, downmix/resample, and
-`<think>` removal. The pipeline and store tests cover the `.done` contract,
-idempotence, summary fallback, error quarantine, SQLite upsert and FTS search;
-they use a fake transcriber and do not load the 4.3 GB model.
+`<think>` removal. The pipeline and folder tests cover the `.done` contract,
+idempotence, summary fallback, error quarantine, Markdown round-trip and file
+search; they use a fake transcriber and do not load the 4.3 GB model.
 
 With the model installed, run the end-to-end smoke:
 
@@ -231,6 +272,6 @@ REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
 
 cp samples/open-yap-1k/conv_d4005da6db98-60s.wav /tmp/smoke.wav
 REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
-  .venv/bin/repartee process /tmp/smoke.wav --db /tmp/smoke.db
-.venv/bin/repartee search bank --db /tmp/smoke.db
+  .venv/bin/repartee process /tmp/smoke.wav --knowledge-base /tmp/smoke-kb
+.venv/bin/repartee search bank --knowledge-base /tmp/smoke-kb
 ```

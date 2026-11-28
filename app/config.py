@@ -22,8 +22,10 @@ STT_DEVICE = os.environ.get("REPARTEE_STT_DEVICE", "auto")
 STT_CHUNK_SECONDS = float(os.environ.get("REPARTEE_STT_CHUNK_SECONDS", "60"))
 STT_MAX_NEW_TOKENS = int(os.environ.get("REPARTEE_STT_MAX_NEW_TOKENS", "1024"))
 
-# Bigger device: transcript -> summary -> SQLite knowledge base.
-DB_PATH = Path(os.environ.get("REPARTEE_DB", DATA_DIR / "repartee.db"))
+# Bigger device: transcript -> summary -> one Markdown file per conversation.
+KNOWLEDGE_BASE_DIR = Path(
+    os.environ.get("REPARTEE_KNOWLEDGE_BASE", HOME / "knowledge-base")
+)
 SUMMARY_ENABLED = os.environ.get("REPARTEE_SUMMARY", "1").lower() not in {
     "0", "false", "no", "off",
 }

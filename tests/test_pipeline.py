@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app import conversations, pipeline, stt
+from app import knowledge_base, pipeline, stt
 
 
 class FakeTranscriber:
@@ -27,20 +27,17 @@ class FakeTranscriber:
 
     def summarize(self, text: str) -> str:
         self.summary_calls += 1
-        if isinstance(self.summary, Exception):
-            raise self.summary
         return self.summary
 
 
 class FailingSummary(FakeTranscriber):
     def summarize(self, text: str) -> str:
+        self.summary_calls += 1
         raise RuntimeError("summary model unavailable")
 
 
-def _db(tmp_path: Path):
-    conn = conversations.connect(tmp_path / "conversations.db")
-    conversations.init(conn)
-    return conn
+def _kb(tmp_path: Path) -> Path:
+    return tmp_path / "knowledge-base"
 
 
 def _recording(root: Path, name: str = "20261128-120000-rep01.wav") -> Path:
@@ -48,6 +45,7 @@ def _recording(root: Path, name: str = "20261128-120000-rep01.wav") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"not real pcm; the fake transcriber never decodes it")
     return path
+
 
 def test_parse_receiver_filename():
     device, started = pipeline.parse_filename("20261128-120000-rep01.wav")
@@ -63,123 +61,125 @@ def test_parse_foreign_filename_falls_back():
     assert started is None
 
 
-def test_process_stores_transcript_and_summary(tmp_path):
-    conn = _db(tmp_path)
+def test_process_writes_one_markdown_entry(tmp_path):
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
 
-    processed = pipeline.process_ready(conn, FakeTranscriber(), recordings)
+    processed = pipeline.process_ready(root, FakeTranscriber(), recordings)
 
     assert processed == 1
-    row = conversations.get(conn, path.name)
-    assert row["device"] == "rep01"
-    assert row["started_at"] == "2026-11-28T12:00:00"
-    assert row["transcript"] == "We discussed the visa paperwork."
-    assert row["summary"] == "Visa paperwork."
-    assert row["status"] == "summarized"
-    assert row["audio_path"] == str(path.resolve())
+    stored = knowledge_base.find(root, path.stem)
+    assert stored == root / "2026-11-28" / f"{path.stem}.md"
+    entry = knowledge_base.get(root, path.stem)
+    assert entry["device"] == "rep01"
+    assert entry["started_at"] == "2026-11-28T12:00:00"
+    assert entry["transcript"] == "We discussed the visa paperwork."
+    assert entry["summary"] == "Visa paperwork."
+    assert entry["status"] == "summarized"
+    assert entry["audio"] == str(path.resolve())
 
 
 def test_worker_requires_done_marker(tmp_path):
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     _recording(recordings)
     fake = FakeTranscriber()
 
-    assert pipeline.process_ready(conn, fake, recordings) == 0
+    assert pipeline.process_ready(root, fake, recordings) == 0
     assert fake.calls == 0
 
 
 def test_worker_skips_error_marker(tmp_path):
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
     pipeline.error_path(path).write_text("boom\n")
     fake = FakeTranscriber()
 
-    assert pipeline.process_ready(conn, fake, recordings) == 0
+    assert pipeline.process_ready(root, fake, recordings) == 0
     assert fake.calls == 0
 
 
 def test_worker_is_idempotent(tmp_path):
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
     fake = FakeTranscriber()
 
-    assert pipeline.process_ready(conn, fake, recordings) == 1
-    assert pipeline.process_ready(conn, fake, recordings) == 0
+    assert pipeline.process_ready(root, fake, recordings) == 1
+    assert pipeline.process_ready(root, fake, recordings) == 0
     assert fake.calls == 1
 
 
-def test_force_reprocesses_and_clears_error(tmp_path):
-    conn = _db(tmp_path)
+def test_force_rewrites_and_clears_error(tmp_path):
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.error_path(path).write_text("old failure\n")
 
-    row = pipeline.process(path, FakeTranscriber(), conn, force=True)
+    entry = pipeline.process(path, FakeTranscriber(), root, force=True)
 
-    assert row["summary"] == "Visa paperwork."
+    assert entry["summary"] == "Visa paperwork."
     assert not pipeline.error_path(path).exists()
 
 
 def test_summary_failure_keeps_transcript(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.config, "SUMMARY_ENABLED", True)
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
 
-    processed = pipeline.process_ready(conn, FailingSummary(), recordings)
+    processed = pipeline.process_ready(root, FailingSummary(), recordings)
 
     assert processed == 1
-    row = conversations.get(conn, path.name)
-    assert row["transcript"] == "We discussed the visa paperwork."
-    assert row["summary"] == ""
-    assert row["status"] == "transcribed"
+    entry = knowledge_base.get(root, path.stem)
+    assert entry["transcript"] == "We discussed the visa paperwork."
+    assert entry["summary"] == ""
+    assert entry["status"] == "transcribed"
 
 
 def test_summary_can_be_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.config, "SUMMARY_ENABLED", False)
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
 
-    pipeline.process_ready(conn, FakeTranscriber(), recordings)
+    pipeline.process_ready(root, FakeTranscriber(), recordings)
 
-    row = conversations.get(conn, path.name)
-    assert row["summary"] == ""
-    assert row["status"] == "transcribed"
+    entry = knowledge_base.get(root, path.stem)
+    assert entry["summary"] == ""
+    assert entry["status"] == "transcribed"
 
 
 def test_short_transcript_is_flagged_without_summary(tmp_path):
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
     fake = FakeTranscriber(text="Thank you.")
 
-    pipeline.process_ready(conn, fake, recordings)
+    pipeline.process_ready(root, fake, recordings)
 
-    row = conversations.get(conn, path.name)
-    assert row["status"] == "short"
-    assert row["summary"] == ""
+    entry = knowledge_base.get(root, path.stem)
+    assert entry["status"] == "short"
+    assert entry["summary"] == ""
     assert fake.summary_calls == 0
 
 
 def test_empty_transcript_is_quarantined(tmp_path):
-    conn = _db(tmp_path)
+    root = _kb(tmp_path)
     recordings = tmp_path / "recordings"
     path = _recording(recordings)
     pipeline.done_path(path).write_text("done\n")
 
-    processed = pipeline.process_ready(conn, FakeTranscriber(text="   "), recordings)
+    processed = pipeline.process_ready(root, FakeTranscriber(text="   "), recordings)
 
     assert processed == 0
     assert pipeline.error_path(path).exists()
-    assert conversations.get(conn, path.name) is None
+    assert knowledge_base.find(root, path.stem) is None

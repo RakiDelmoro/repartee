@@ -19,9 +19,9 @@ def main(argv: list[str] | None = None) -> int:
         return pipeline.main(argv)
 
     if argv and argv[0] in {"search", "conversations", "show"}:
-        from . import conversations
+        from . import knowledge_base
 
-        return conversations.main(argv)
+        return knowledge_base.main(argv)
 
     from . import receiver
 

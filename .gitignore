@@ -1,5 +1,6 @@
 # datasets and model weights
 data/
+knowledge-base/
 models/
 samples/
 vendor/
