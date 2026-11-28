@@ -207,7 +207,8 @@ container/reboot. The worker is an ordinary foreground process; nothing starts
 or restarts it for you. For development, use the small supervisor:
 
 ```bash
-nohup scripts/supervise.sh > data/supervise.log 2>&1 &
+nohup env REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+  scripts/supervise.sh > data/supervise.log 2>&1 &
 ```
 
 It starts both children and restarts either one after 5 s if it exits. It uses
@@ -311,6 +312,23 @@ worker.
 | native Linux/WSL | systemd `repartee.target` | yes, `Restart=always` | yes |
 | Docker | Compose `restart: unless-stopped` | yes | yes, if Docker starts |
 
+### Where to run what
+
+Run exactly **one** of these. Never run two receivers against the same
+`/dev/ttyACM0`, and never run two workers against the same GPU.
+
+| Where | Start command | Lives until |
+|---|---|---|
+| this dev container | `nohup env REPARTEE_STT_MODEL=... scripts/supervise.sh ... &` | the container stops |
+| WSL/Ubuntu host, systemd | `sudo systemctl enable --now repartee.target` | reboot |
+| WSL/Ubuntu host, Docker | `docker compose up -d --build` | Docker stops it |
+
+This container has **no systemd** (`systemctl` is a stub) and **no Docker CLI**
+(`docker: command not found`), so the systemd and Docker commands must run on
+the WSL/Ubuntu host, not inside the container. That host also needs a
+host-visible copy of the model; `/root/.cache/repartee/LFM3-Omni-2B` exists
+inside this container, not on the host.
+
 ### systemd (native Linux, or WSL with systemd)
 
 Use this when the repo runs on a real Linux host. This development container has
@@ -401,7 +419,8 @@ Docker creates an empty host directory and the worker fails; check
 ### Development container
 
 ```bash
-nohup scripts/supervise.sh > data/supervise.log 2>&1 &
+nohup env REPARTEE_STT_MODEL=/root/.cache/repartee/LFM3-Omni-2B \
+  scripts/supervise.sh > data/supervise.log 2>&1 &
 pgrep -af 'repartee (receiver|worker)'
 ```
 
