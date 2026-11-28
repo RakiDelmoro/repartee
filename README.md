@@ -20,15 +20,41 @@ usbipd bind --busid <BUSID>       # once per device
 usbipd attach --wsl --busid <BUSID>
 ```
 
-Then in WSL or the container:
+The board is the Espressif `303a:1001` device, not the FTDI `0403:6014`
+converter.
+
+Check it in WSL:
+
+```powershell
+wsl -d Ubuntu-24.04 -- bash -lc 'ls -l /dev/ttyACM0'
+```
+
+Now check inside the container:
 
 ```bash
 ls -l /dev/ttyACM0
 ```
 
-The dev container maps `/dev/ttyACM0` at creation; attach the board before
-starting the container, or restart the container after attaching. Re-attach
-after every replug.
+### If the container was already running
+
+`usbipd attach` changes WSL only. The container's `/dev` was fixed when the
+container was created, so a new host device does not appear by itself. In VS
+Code:
+
+```text
+Ctrl+Shift+P → Dev Containers: Rebuild Container
+```
+
+`Rebuild Container` recreates it with the `--device=/dev/ttyACM0` mapping.
+A simple container **restart is not enough**; `--device` is applied only at
+creation. You only need this when `/dev/ttyACM0` is missing inside the
+container, not after every replug.
+
+If it is still missing after the rebuild, the engine is Docker Desktop, whose
+VM cannot see a device attached to WSL. Use Docker Engine inside WSL, or run
+the receiver on the WSL host.
+
+Re-attach after every board replug.
 
 ## Quick start — this dev container
 
