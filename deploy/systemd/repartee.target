@@ -1,0 +1,8 @@
+[Unit]
+Description=Repartee receiver and knowledge-base worker
+Documentation=https://github.com/RakiDelmoro/repartee
+Wants=repartee-receiver.service repartee-worker.service
+After=repartee-receiver.service repartee-worker.service
+
+[Install]
+WantedBy=multi-user.target

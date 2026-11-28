@@ -1,0 +1,20 @@
+[Unit]
+Description=Repartee LFM3 speech-to-text and knowledge-base worker
+Documentation=https://github.com/RakiDelmoro/repartee
+PartOf=repartee.target
+
+[Service]
+Type=simple
+User=repartee
+Group=repartee
+SupplementaryGroups=video render
+StateDirectory=repartee
+WorkingDirectory=/opt/repartee
+EnvironmentFile=-/etc/repartee/repartee.env
+ExecStart=/opt/repartee/.venv/bin/repartee worker
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=repartee.target

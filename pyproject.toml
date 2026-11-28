@@ -3,7 +3,9 @@ name = "repartee-receiver"
 version = "0.1.0"
 description = "USB CDC receiver for the ESP32 conversation recorder"
 requires-python = ">=3.11"
-dependencies = []
+# The file-based conversation store parses YAML frontmatter; the receiver-only
+# install still ships the CLI that exposes conversations/search/show.
+dependencies = ["pyyaml>=6.0"]
 
 [project.optional-dependencies]
 # Windows needs pyserial; Linux drives the raw tty directly.
@@ -17,7 +19,6 @@ bigger = [
     "numpy>=2.0",
     "soundfile>=0.12",
     "librosa>=0.10",
-    "pyyaml>=6.0",
 ]
 
 [project.scripts]

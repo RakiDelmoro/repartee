@@ -298,6 +298,127 @@ retries a quarantined file and replaces the entry.
 `--language`, `--chunk-seconds` and `--max-new-tokens` override the STT ones.
 `--knowledge-base` selects another folder.
 
+## Deployment
+
+The application is identical in development and production: two processes, one
+durable queue (`data/recordings/*.wav.done`), one Markdown folder
+(`knowledge-base/`). Only the supervisor differs. The receiver never starts the
+worker.
+
+| environment | supervisor | survives a crash | survives reboot |
+|---|---|---|---|
+| dev container | `scripts/supervise.sh` | yes, 5 s restart | no, unless the container restarts |
+| native Linux/WSL | systemd `repartee.target` | yes, `Restart=always` | yes |
+| Docker | Compose `restart: unless-stopped` | yes | yes, if Docker starts |
+
+### systemd (native Linux, or WSL with systemd)
+
+Use this when the repo runs on a real Linux host. This development container has
+no systemd (`systemctl` is a stub here).
+
+```bash
+# Service account and directories.
+sudo useradd --system --user-group --home /var/lib/repartee --shell /usr/sbin/nologin repartee
+sudo usermod -aG dialout,video,render repartee
+sudo mkdir -p /opt/repartee /var/lib/repartee /etc/repartee
+
+# Install the application in /opt/repartee (clone or copy this repo there).
+cd /opt/repartee
+python3 -m venv .venv
+.venv/bin/pip install -e '.[bigger]'
+sudo chown -R repartee:repartee /opt/repartee /var/lib/repartee
+
+# Configuration and units.
+sudo cp deploy/systemd/repartee.env.example /etc/repartee/repartee.env
+sudoedit /etc/repartee/repartee.env
+sudo cp deploy/systemd/*.service deploy/systemd/*.target /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now repartee.target
+
+systemctl status repartee.target
+journalctl -u repartee-receiver -u repartee-worker -f
+```
+
+The units in `deploy/systemd/`:
+
+| unit | role |
+|---|---|
+| `repartee-receiver.service` | owns `/dev/ttyACM0`; `Restart=always`; `dialout` |
+| `repartee-worker.service` | owns the GPU/model; `Restart=always`; `video render` |
+| `repartee.target` | starts/stops both; `Wants=` both, services are `PartOf=` it |
+
+Notes:
+
+- `StateDirectory=repartee` creates `/var/lib/repartee` for the service user.
+  `repartee.env` points `REPARTEE_DATA` and `REPARTEE_KNOWLEDGE_BASE` into it.
+- Put the model at `/opt/repartee/models/LFM3-Omni-2B`, or set
+  `REPARTEE_STT_MODEL` to any readable checkpoint path. The model directory must
+  be readable by `repartee`.
+- Serial access comes from the `dialout` group. GPU access comes from `video`
+  and `render` on common distributions; if your `/dev/nvidia*` nodes have a
+  different group, adjust `SupplementaryGroups=`. Running the worker as root
+  avoids the permission problem but is not recommended.
+- `systemctl restart repartee-worker` restarts only the worker; the receiver
+  keeps the serial link. `systemctl stop repartee.target` stops both.
+- Updates: `git pull`, `.venv/bin/pip install -e '.[bigger]'`,
+  `sudo systemctl restart repartee-worker`. The first job pays the cold start.
+
+### Docker Compose
+
+Prerequisites: Docker Engine/Desktop with Compose v2, the NVIDIA Container
+Toolkit, and the USB device visible to the host. On Windows, attach the board
+with `usbipd` as described under [Run](#run).
+
+```bash
+mkdir -p data knowledge-base
+
+# Point this at the host directory holding the LFM3-Omni checkpoint.
+export REPARTEE_MODEL_DIR=/root/.cache/repartee/LFM3-Omni-2B
+
+docker compose up -d --build
+docker compose ps
+docker compose logs -f worker
+```
+
+`compose.yaml` defines the same two processes:
+
+| service | device | volumes | role |
+|---|---|---|---|
+| `receiver` | `/dev/ttyACM0` | `./data` | writes WAVs + `.done` |
+| `worker` | GPU | `./data`, `./knowledge-base`, model (ro) | STT + summary + Markdown |
+
+Both use `restart: unless-stopped`, so each is restarted independently. The
+worker image is large because it contains torch; build it once. The worker build
+uses `TORCH_INDEX_URL` (default `https://download.pytorch.org/whl/cu128`); set
+it if your CUDA version differs.
+
+If your Compose version rejects the `deploy` GPU reservation, replace that block
+with `gpus: all` (the file contains a comment). If the model mount is missing,
+Docker creates an empty host directory and the worker fails; check
+`REPARTEE_MODEL_DIR`. The containers run as root, so files under `data/` and
+`knowledge-base/` are root-owned; change ownership if you need to edit them.
+
+### Development container
+
+```bash
+nohup scripts/supervise.sh > data/supervise.log 2>&1 &
+pgrep -af 'repartee (receiver|worker)'
+```
+
+`scripts/supervise.sh` is a supervisor, not a merged process: it starts both
+children and restarts either one after 5 s. It is the best available option in
+this container because systemd is not running. It does not survive a container
+stop or machine reboot; use the Docker restart policy or the systemd setup above
+for that.
+
+### Why not one process
+
+The worker polls the durable queue, not the receiver. Keeping them separate
+means a CUDA/OOM crash cannot stop recording, a USB replug cannot unload the
+model, and the receiver can run on a small host while the worker runs on the GPU
+box. A single `repartee run` command would be fine only as a supervisor of the
+two children; `scripts/supervise.sh` already is that.
+
 ## Tests
 
 ```bash

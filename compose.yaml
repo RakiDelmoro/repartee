@@ -1,0 +1,57 @@
+name: repartee
+
+# The receiver and worker are deliberately separate services. They share the
+# durable data/ queue; the worker only reads a finished *.wav.done. A crash or
+# restart of one does not take down the other.
+x-app: &app
+  init: true
+  restart: unless-stopped
+  working_dir: /app
+
+services:
+  receiver:
+    <<: *app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: receiver
+    command: ["receiver"]
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0
+    volumes:
+      - ./data:/app/data
+    environment:
+      REPARTEE_SERIAL: /dev/ttyACM0
+      REPARTEE_DATA: /app/data
+    stop_grace_period: 10s
+
+  worker:
+    <<: *app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+      args:
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}
+    command: ["worker"]
+    volumes:
+      - ./data:/app/data
+      - ./knowledge-base:/app/knowledge-base
+      # Set REPARTEE_MODEL_DIR to the host directory that holds the LFM3-Omni
+      # checkpoint. The container path is fixed so REPARTEE_STT_MODEL can be.
+      - ${REPARTEE_MODEL_DIR:-./models/LFM3-Omni-2B}:/models/LFM3-Omni-2B:ro
+    environment:
+      REPARTEE_DATA: /app/data
+      REPARTEE_KNOWLEDGE_BASE: /app/knowledge-base
+      REPARTEE_STT_MODEL: /models/LFM3-Omni-2B
+      REPARTEE_STT_DEVICE: cuda
+    stop_grace_period: 30s
+    # Requires the NVIDIA Container Toolkit. On Compose versions without
+    # non-swarm deploy device reservations, replace this with `gpus: all`.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

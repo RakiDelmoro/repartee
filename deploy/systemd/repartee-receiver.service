@@ -1,0 +1,21 @@
+[Unit]
+Description=Repartee USB CDC receiver
+Documentation=https://github.com/RakiDelmoro/repartee
+After=dev-ttyACM0.device
+PartOf=repartee.target
+
+[Service]
+Type=simple
+User=repartee
+Group=repartee
+SupplementaryGroups=dialout
+StateDirectory=repartee
+WorkingDirectory=/opt/repartee
+EnvironmentFile=-/etc/repartee/repartee.env
+ExecStart=/opt/repartee/.venv/bin/repartee receiver
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=repartee.target

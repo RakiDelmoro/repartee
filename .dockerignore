@@ -1,0 +1,14 @@
+.git
+.devcontainer
+.venv
+.venv-duplex
+__pycache__
+*.pyc
+.pytest_cache
+data
+knowledge-base
+models
+samples
+vendor
+image.png
+*.log
