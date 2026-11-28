@@ -58,6 +58,9 @@ Stop:
 when present, otherwise downloads it. It ends up in the workspace at
 `models/LFM3-Omni-2B`, which is gitignored but visible in the file explorer.
 
+The active model is this workspace copy. If `setup.sh` copied from
+`/root/.cache`, that root copy is only a source and can be removed.
+
 `start.sh` runs the supervisor in the background. It survives closing the
 terminal, but not the container stopping. The supervisor restarts either child
 after 5 s.
