@@ -11,31 +11,66 @@ The model is 2.17 B parameters. It runs on the bigger device, not on the ESP32.
 
 ## 0. Attach the board
 
-Windows PowerShell as Administrator:
+Windows PowerShell as Administrator.
+
+### 0.1 Find the board's BUSID
 
 ```powershell
 winget install usbipd
 usbipd list
-usbipd bind --busid <BUSID>       # once per device
-usbipd attach --wsl --busid <BUSID>
 ```
 
-The board is the Espressif `303a:1001` device, not the FTDI `0403:6014`
-converter.
+Look in the **Connected** section. The XIAO ESP32-S3 native USB device is:
 
-Check it in WSL:
+```text
+303a:1001  USB JTAG/serial debug unit
+```
+
+Note the BUSID in the left column, for example `6-2`. The BUSID is **not
+fixed**: it can change when you use another USB port or another device.
+
+If your board uses a USB-to-serial bridge instead, pick the matching row:
+CP210x `10c4:ea60`, CH340 `1a86:7523`, or FTDI `0403:6014`. Do not pick a
+device just because it is a serial converter; match the chip your board
+actually uses.
+
+Persisted entries below the Connected section are remembered but not currently
+attached.
+
+### 0.2 Bind and attach
 
 ```powershell
-wsl -d Ubuntu-24.04 -- bash -lc 'ls -l /dev/ttyACM0'
+$BUSID = "6-2"                       # replace with the BUSID from usbipd list
+
+usbipd bind --busid $BUSID           # once per port/device
+usbipd attach --wsl --busid $BUSID
+usbipd list
 ```
 
-Now check inside the container:
+After `bind`, the state should be `Shared`; after `attach`, `Attached`. If the
+device is busy, close `espflash monitor`, Arduino IDE, or anything holding the
+COM port first.
+
+### 0.3 Check WSL
+
+```powershell
+wsl -d Ubuntu-24.04 -- bash -lc 'ls -l /dev/ttyACM0 /dev/ttyUSB* 2>/dev/null'
+```
+
+Native ESP32-S3 USB CDC normally appears as `/dev/ttyACM0`. A bridge chip
+normally appears as `/dev/ttyUSB0`. Use whichever path exists.
+
+### 0.4 Check the container
 
 ```bash
 ls -l /dev/ttyACM0
 ```
 
-### If the container was already running
+If the container uses `/dev/ttyUSB0`, update the `--device` mapping in
+`.devcontainer/devcontainer.json` and set `REPARTEE_SERIAL` in
+`.devcontainer` or at run time.
+
+### 0.5 If the device is missing, rebuild the container
 
 `usbipd attach` changes WSL only. The container's `/dev` was fixed when the
 container was created, so a new host device does not appear by itself. In VS
